@@ -3,7 +3,6 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as vscode from 'vscode';
 import * as nls from 'vscode-nls';
 import * as errors from '../../dap/errors';
 import CdpConnection from '../../cdp/connection';
@@ -14,6 +13,8 @@ import { BrowserTarget, BrowserTargetManager } from './browserTargets';
 import { Target, Launcher } from '../../targets/targets';
 import { BrowserSourcePathResolver } from './browserPathResolver';
 import { LaunchParams, baseURL } from './browserLaunchParams';
+import { Subject, Subscription } from 'rxjs';
+import { first } from 'rxjs/operators';
 
 const localize = nls.loadMessageBundle();
 
@@ -24,11 +25,11 @@ export class BrowserLauncher implements Launcher {
   private _targetManager: BrowserTargetManager | undefined;
   private _launchParams: LaunchParams | undefined;
   private _mainTarget?: BrowserTarget;
-  private _disposables: vscode.Disposable[] = [];
-  private _onTerminatedEmitter = new vscode.EventEmitter<void>();
-  readonly onTerminated = this._onTerminatedEmitter.event;
-  private _onTargetListChangedEmitter = new vscode.EventEmitter<void>();
-  readonly onTargetListChanged = this._onTargetListChangedEmitter.event;
+  private _onTerminatedEmitter = new Subject<void>();
+  readonly onTerminated = this._onTerminatedEmitter.asObservable();
+  private _onTargetListChangedEmitter = new Subject<void>();
+  readonly onTargetListChanged = this._onTargetListChangedEmitter.asObservable();
+  private _subscriptions: Subscription[] = [];
 
   constructor(storagePath: string, rootPath: string | undefined) {
     this._storagePath = storagePath;
@@ -37,12 +38,6 @@ export class BrowserLauncher implements Launcher {
 
   targetManager(): BrowserTargetManager | undefined {
     return this._targetManager;
-  }
-
-  dispose() {
-    for (const disposable of this._disposables)
-      disposable.dispose();
-    this._disposables = [];
   }
 
   async _launchBrowser(args: string[]): Promise<CdpConnection> {
@@ -71,9 +66,9 @@ export class BrowserLauncher implements Launcher {
       return errors.createUserError(localize('error.executableNotFound', 'Unable to find browser executable'));
     }
 
-    connection.onDisconnected(() => {
-      this._onTerminatedEmitter.fire();
-    }, undefined, this._disposables);
+    connection.onDisconnected.pipe(first()).subscribe(() => {
+      this._onTerminatedEmitter.next();
+    });
     this._connectionForTest = connection;
     this._launchParams = params;
 
@@ -82,26 +77,25 @@ export class BrowserLauncher implements Launcher {
     if (!this._targetManager)
       return errors.createUserError(localize('error.unableToAttachToBrowser', 'Unable to attach to the browser'));
 
-    this._targetManager.serviceWorkerModel.onDidChange(() => this._onTargetListChangedEmitter.fire());
-    this._targetManager.frameModel.onFrameNavigated(() => this._onTargetListChangedEmitter.fire());
-    this._disposables.push(this._targetManager);
+    this._subscriptions.push(this._targetManager.serviceWorkerModel.onDidChange.subscribe(() => this._onTargetListChangedEmitter.next()));
+    this._subscriptions.push(this._targetManager.frameModel.onFrameNavigated.subscribe(() => this._onTargetListChangedEmitter.next()));
 
-    this._targetManager.onTargetAdded((target: BrowserTarget) => {
-      this._onTargetListChangedEmitter.fire();
-    });
-    this._targetManager.onTargetRemoved((target: BrowserTarget) => {
-      this._onTargetListChangedEmitter.fire();
-    });
+    this._subscriptions.push(this._targetManager.onTargetAdded.subscribe((target: BrowserTarget) => {
+      this._onTargetListChangedEmitter.next();
+    }));
+    this._subscriptions.push(this._targetManager.onTargetRemoved.subscribe((target: BrowserTarget) => {
+      this._onTargetListChangedEmitter.next();
+    }));
 
     // Note: assuming first page is our main target breaks multiple debugging sessions
     // sharing the browser instance. This can be fixed.
     this._mainTarget = await this._targetManager.waitForMainTarget();
     if (!this._mainTarget)
       return errors.createSilentError(localize('error.threadNotFound', 'Thread not found'));
-    this._targetManager.onTargetRemoved((target: BrowserTarget) => {
+    this._subscriptions.push(this._targetManager.onTargetRemoved.subscribe((target: BrowserTarget) => {
       if (target === this._mainTarget)
-        this._onTerminatedEmitter.fire();
-    });
+        this._onTerminatedEmitter.next();
+    }));
     return this._mainTarget;
   }
 
@@ -137,6 +131,10 @@ export class BrowserLauncher implements Launcher {
       await this._mainTarget.cdp().Page.navigate({ url: this._launchParams!.url });
     else
       await this._mainTarget.cdp().Page.reload({ });
+  }
+
+  dispose() {
+    this._subscriptions.forEach(x => x.unsubscribe());
   }
 
   targetList(): Target[] {

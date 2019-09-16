@@ -23,7 +23,7 @@ export function addTests(testRunner) {
     };
 
     await new Promise(f => {
-      p.onSessionCreated(() => {
+      p.onSessionCreated.subscribe(() => {
         if (p.binder.targetList().length === 11)
           f();
       });

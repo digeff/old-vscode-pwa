@@ -13,6 +13,8 @@ import Dap from '../../dap/api';
 import { Launcher, Target } from '../../targets/targets';
 import * as utils from '../../utils/urlUtils';
 import { execFileSync } from 'child_process';
+import { Subject } from 'rxjs';
+import { first } from 'rxjs/operators';
 
 export interface LaunchParams extends Dap.LaunchParams {
   command: string;
@@ -35,10 +37,10 @@ export class NodeLauncher implements Launcher {
   _targets = new Map<string, NodeTarget>();
   _pathResolver: NodeSourcePathResolver;
   _targetOrigin: any;
-  private _onTerminatedEmitter = new vscode.EventEmitter<void>();
-  readonly onTerminated = this._onTerminatedEmitter.event;
-  _onTargetListChangedEmitter = new vscode.EventEmitter<void>();
-  readonly onTargetListChanged = this._onTargetListChangedEmitter.event;
+  private _onTerminatedEmitter = new Subject<void>();
+  readonly onTerminated = this._onTerminatedEmitter.asObservable();
+  _onTargetListChangedEmitter = new Subject<void>();
+  readonly onTargetListChanged = this._onTargetListChangedEmitter.asObservable();
 
   constructor(rootPath: string | undefined) {
     this._rootPath = rootPath;
@@ -70,7 +72,7 @@ export class NodeLauncher implements Launcher {
     vscode.window.onDidCloseTerminal(terminal => {
       if (terminal === this._terminal && !this._isRestarting) {
         this._stopServer();
-        this._onTerminatedEmitter.fire();
+        this._onTerminatedEmitter.next();
       }
     });
 
@@ -127,7 +129,7 @@ export class NodeLauncher implements Launcher {
     const cdp = connection.rootSession();
     const { targetInfo } = await new Promise<Cdp.Target.TargetCreatedEvent>(f => cdp.Target.on('targetCreated', f));
     new NodeTarget(this, connection, cdp, targetInfo);
-    this._onTargetListChangedEmitter.fire();
+    this._onTargetListChangedEmitter.next();
   }
 
   targetList(): Target[] {
@@ -170,8 +172,8 @@ class NodeTarget implements Target {
   private _serialize: Promise<Cdp.Api | undefined> = Promise.resolve(undefined);
   private _attached = false;
   private _waitingForDebugger: boolean;
-  private _onNameChangedEmitter = new vscode.EventEmitter<void>();
-  readonly onNameChanged = this._onNameChangedEmitter.event;
+  private _onNameChangedEmitter = new Subject<string>();
+  readonly onNameChanged = this._onNameChangedEmitter.asObservable();
 
   constructor(launcher: NodeLauncher, connection: Connection, cdp: Cdp.Api, targetInfo: Cdp.Target.TargetInfo) {
     this._launcher = launcher;
@@ -188,7 +190,7 @@ class NodeTarget implements Target {
     this._setParent(launcher._targets.get(targetInfo.openerId!));
     launcher._targets.set(targetInfo.targetId, this);
     cdp.Target.on('targetDestroyed', () => this._connection.close());
-    connection.onDisconnected(_ => this._disconnected());
+    connection.onDisconnected.pipe(first()).subscribe(_ => this._disconnected());
   }
 
   id(): string {
@@ -270,7 +272,7 @@ class NodeTarget implements Target {
     this._setParent(undefined);
     this._launcher._targets.delete(this._targetId);
     // await this.detach();
-    this._launcher._onTargetListChangedEmitter.fire();
+    this._launcher._onTargetListChangedEmitter.next();
   }
 
   canAttach(): boolean {

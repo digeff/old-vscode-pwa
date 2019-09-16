@@ -1,4 +1,5 @@
 // Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
 import * as net from 'net';
@@ -13,6 +14,9 @@ import { SessionManager } from './sessionManager';
 import { BrowserLauncher } from './targets/browser/browserLauncher';
 import { NodeLauncher } from './targets/node/nodeLauncher';
 import { BrowserAttacher } from './targets/browser/browserAttacher';
+import { Subject, Subscription } from 'rxjs';
+import { Disposable } from './events/disposable';
+
 import { Target } from './targets/targets';
 
 function checkVersion(version: string): boolean {
@@ -25,15 +29,17 @@ function checkVersion(version: string): boolean {
   return toNumber(vscode.version) >= toNumber(version);
 }
 
-export class Session implements vscode.Disposable {
+export class Session implements Disposable {
   private _server: net.Server;
   private _debugAdapter?: DebugAdapter;
   private _binder?: Binder;
-  private _onTargetNameChanged?: vscode.Disposable;
+  private _onTargetNameChanged?: Subscription;
 
   constructor(context: vscode.ExtensionContext, debugSession: vscode.DebugSession, target: Target | undefined, binderDelegate: BinderDelegate | undefined, callback: (debugAdapter: DebugAdapter) => void) {
     if (target && checkVersion('1.39.0'))
-      this._onTargetNameChanged = target.onNameChanged(() => debugSession.name = target.name());
+      this._onTargetNameChanged = target.onNameChanged.subscribe((newName: string) => {
+         debugSession.name = newName;
+      });
 
     this._server = net.createServer(async socket => {
       let rootPath = vscode.workspace.rootPath;
@@ -72,27 +78,25 @@ export class Session implements vscode.Disposable {
     if (this._debugAdapter)
       this._debugAdapter.dispose();
     if (this._onTargetNameChanged)
-      this._onTargetNameChanged.dispose();
+      this._onTargetNameChanged.unsubscribe();
     this._server.close();
   }
 }
 
 export class AdapterFactory implements vscode.DebugAdapterDescriptorFactory, vscode.Disposable {
   private _context: vscode.ExtensionContext;
-  private _disposables: vscode.Disposable[];
-  private _onAdapterAddedEmitter = new vscode.EventEmitter<DebugAdapter>();
-  private _onAdapterRemovedEmitter = new vscode.EventEmitter<DebugAdapter>();
+  private _onAdapterAddedEmitter = new Subject<DebugAdapter>();
+  private _onAdapterRemovedEmitter = new Subject<DebugAdapter>();
   private _sessions = new Map<string, Session>();
   private _sessionManager: SessionManager;
 
-  readonly onAdapterAdded = this._onAdapterAddedEmitter.event;
-  readonly onAdapterRemoved = this._onAdapterRemovedEmitter.event;
+  readonly onAdapterAdded = this._onAdapterAddedEmitter.asObservable();
+  readonly onAdapterRemoved = this._onAdapterRemovedEmitter.asObservable();
 
   constructor(context: vscode.ExtensionContext) {
     this._context = context;
     context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory('pwa', this));
     context.subscriptions.push(this);
-    this._disposables = [this._onAdapterAddedEmitter, this._onAdapterRemovedEmitter];
     this._sessionManager = new SessionManager();
 
     vscode.debug.onDidTerminateDebugSession(debugSession => {
@@ -101,9 +105,9 @@ export class AdapterFactory implements vscode.DebugAdapterDescriptorFactory, vsc
         return;
       this._sessions.delete(debugSession.id);
       if (session.debugAdapter())
-        this._onAdapterRemovedEmitter.fire(session.debugAdapter());
+        this._onAdapterRemovedEmitter.next(session.debugAdapter());
       session.dispose();
-    }, undefined, this._disposables);
+    }, undefined, undefined);
   }
 
   adapters(): DebugAdapter[] {
@@ -118,7 +122,7 @@ export class AdapterFactory implements vscode.DebugAdapterDescriptorFactory, vsc
 
   createDebugAdapterDescriptor(debugSession: vscode.DebugSession, executable: vscode.DebugAdapterExecutable | undefined): vscode.ProviderResult<vscode.DebugAdapterDescriptor> {
     const session = this._sessionManager.createSession(this._context, debugSession, debugAdapter => {
-      this._onAdapterAddedEmitter.fire(debugAdapter);
+      this._onAdapterAddedEmitter.next(debugAdapter);
     });
     this._sessions.set(debugSession.id, session);
     return session.descriptor();
@@ -138,13 +142,10 @@ export class AdapterFactory implements vscode.DebugAdapterDescriptorFactory, vsc
   dispose() {
     for (const session of this._sessions.values()) {
       if (session.debugAdapter())
-        this._onAdapterRemovedEmitter.fire(session.debugAdapter());
+        this._onAdapterRemovedEmitter.next(session.debugAdapter());
       session.dispose();
     }
     this._sessions.clear();
     this._sessionManager.dispose();
-    for (const disposable of this._disposables)
-      disposable.dispose();
-    this._disposables = [];
   }
 }

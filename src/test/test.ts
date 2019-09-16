@@ -16,6 +16,8 @@ import { Logger } from './logger';
 import { Binder, BinderDelegate } from '../binder';
 import { Target } from '../targets/targets';
 import * as vscode from 'vscode';
+import { first } from 'rxjs/operators';
+import { Subject } from 'rxjs';
 
 export const kStabilizeNames = ['id', 'threadId', 'sourceReference', 'variablesReference'];
 
@@ -84,8 +86,8 @@ export class TestP {
   private _browserLauncher: BrowserLauncher;
   readonly binder: Binder;
 
-  private _onSessionCreatedEmitter = new vscode.EventEmitter<Session>();
-  readonly onSessionCreated = this._onSessionCreatedEmitter.event;
+  private _onSessionCreatedEmitter = new Subject<Session>();
+  readonly onSessionCreated = this._onSessionCreatedEmitter.asObservable();
 
   constructor(goldenText: GoldenText) {
     this._args = ['--headless'];
@@ -143,7 +145,7 @@ export class TestP {
     });
     session.dap.configurationDone({});
     this._workerCallback(session);
-    this._onSessionCreatedEmitter.fire(session);
+    this._onSessionCreatedEmitter.next(session);
     return session.debugAdapter;
   }
 
@@ -215,10 +217,9 @@ export class TestP {
     return new Promise<void>(cb => {
       this.initialize.then(() => {
         if (this._connection) {
-          const disposable = this._connection.onDisconnected(() => {
+          this._connection.onDisconnected.pipe(first()).subscribe(() => {
             this._disposeSessions();
             cb();
-            disposable.dispose();
           });
         } else {
           this._disposeSessions();

@@ -3,9 +3,9 @@
 
 import { Transport } from './transport';
 import { debug } from 'debug';
-import * as vscode from 'vscode';
-import { EventEmitter } from 'events';
 import Cdp from './api';
+import { Subject } from 'rxjs';
+import { EventEmitter } from 'events';
 
 const debugConnection = debug('connection');
 
@@ -43,8 +43,8 @@ export default class Connection {
   private _sessions: Map<string, CDPSession>;
   private _closed: boolean;
   private _rootSession: CDPSession;
-  private _onDisconnectedEmitter = new vscode.EventEmitter();
-  readonly onDisconnected = this._onDisconnectedEmitter.event;
+  private _onDisconnectedEmitter = new Subject();
+  readonly onDisconnected = this._onDisconnectedEmitter.asObservable();
 
   constructor(transport: Transport) {
     this._lastId = 0;
@@ -96,7 +96,7 @@ export default class Connection {
     for (const session of this._sessions.values())
       session._onClose();
     this._sessions.clear();
-    this._onDisconnectedEmitter.fire();
+    this._onDisconnectedEmitter.next();
   }
 
   close() {

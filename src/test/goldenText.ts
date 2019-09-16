@@ -70,7 +70,7 @@ export class GoldenText {
       fs.writeFileSync(goldenFilePath, output, {encoding: 'utf-8'});
     } else {
       const expectations = fs.readFileSync(goldenFilePath).toString('utf-8');
-      if (output !== expectations)
+      if (output.replace(/\r\n/g, '\n') !== expectations.replace(/\r\n/g, '\n'))
         throw new Error('FAILED: wrong test expectations!');
     }
   }

@@ -4,7 +4,6 @@
 import { debug } from 'debug';
 import * as path from 'path';
 import { URL } from 'url';
-import * as vscode from 'vscode';
 import { Target } from '../../targets/targets';
 import Cdp from '../../cdp/api';
 import CdpConnection from '../../cdp/connection';
@@ -12,12 +11,14 @@ import * as urlUtils from '../../utils/urlUtils';
 import { FrameModel } from './frames';
 import { ServiceWorkerModel } from './serviceWorkers';
 import { InlineScriptOffset, SourcePathResolver } from '../../common/sourcePathResolver';
+import { Disposable } from '../../events/disposable';
+import { Subject } from 'rxjs';
 
 const debugTarget = debug('target');
 
 export type PauseOnExceptionsState = 'none' | 'uncaught' | 'all';
 
-export class BrowserTargetManager implements vscode.Disposable {
+export class BrowserTargetManager implements Disposable {
   private _connection: CdpConnection;
   private _targets: Map<Cdp.Target.TargetID, BrowserTarget> = new Map();
   private _browser: Cdp.Api;
@@ -26,10 +27,10 @@ export class BrowserTargetManager implements vscode.Disposable {
   _sourcePathResolver: SourcePathResolver;
   _targetOrigin: any;
 
-  private _onTargetAddedEmitter = new vscode.EventEmitter<BrowserTarget>();
-  private _onTargetRemovedEmitter = new vscode.EventEmitter<BrowserTarget>();
-  readonly onTargetAdded = this._onTargetAddedEmitter.event;
-  readonly onTargetRemoved = this._onTargetRemovedEmitter.event;
+  private _onTargetAddedEmitter = new Subject<BrowserTarget>();
+  private _onTargetRemovedEmitter = new Subject<BrowserTarget>();
+  readonly onTargetAdded = this._onTargetAddedEmitter.asObservable();
+  readonly onTargetRemoved = this._onTargetRemovedEmitter.asObservable();
 
   static async connect(connection: CdpConnection, sourcePathResolver: SourcePathResolver, targetOrigin: any): Promise<BrowserTargetManager | undefined> {
     const rootSession = connection.rootSession();
@@ -108,7 +109,7 @@ export class BrowserTargetManager implements vscode.Disposable {
       this.frameModel.attached(cdp, targetInfo.targetId);
     this.serviceWorkerModel.attached(cdp);
 
-    this._onTargetAddedEmitter.fire(target);
+    this._onTargetAddedEmitter.next(target);
 
     // For targets that we don't report to the system, auto-resume them on our on.
     if (!jsTypes.has(targetInfo.type))
@@ -132,7 +133,7 @@ export class BrowserTargetManager implements vscode.Disposable {
     if (target.parentTarget)
       target.parentTarget._children.delete(targetId);
 
-    this._onTargetRemovedEmitter.fire(target);
+    this._onTargetRemovedEmitter.next(target);
     debugTarget(`Detached from target ${targetId}`);
     if (!this._targets.size)
       this._browser.Browser.close({});
@@ -157,8 +158,8 @@ export class BrowserTarget implements Target {
   private _ondispose: (t: BrowserTarget) => void;
   private _waitingForDebugger: boolean;
   private _attached: boolean = false;
-  private _onNameChangedEmitter = new vscode.EventEmitter<void>();
-  readonly onNameChanged = this._onNameChangedEmitter.event;
+  private _onNameChangedEmitter = new Subject<string>();
+  readonly onNameChanged = this._onNameChangedEmitter.asObservable();
 
   _children: Map<Cdp.Target.TargetID, BrowserTarget> = new Map();
 
@@ -303,7 +304,7 @@ export class BrowserTarget implements Target {
 
   _updateFromInfo(targetInfo: Cdp.Target.TargetInfo) {
     this._targetInfo = targetInfo;
-    this._onNameChangedEmitter.fire();
+    this._onNameChangedEmitter.next(this.name());
   }
 
   _computeName(): string {

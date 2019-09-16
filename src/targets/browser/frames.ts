@@ -4,17 +4,17 @@
 import Cdp from '../../cdp/api';
 import { URL } from 'url';
 import * as path from 'path';
-import * as vscode from 'vscode';
+import { Subject } from 'rxjs';
 
 export class FrameModel {
   private _mainFrame?: Frame;
-  private _onFrameAddedEmitter = new vscode.EventEmitter<Frame>();
-  _onFrameRemovedEmitter = new vscode.EventEmitter<Frame>();
-  private _onFrameNavigatedEmitter = new vscode.EventEmitter<Frame>();
+  private _onFrameAddedEmitter = new Subject<Frame>();
+  _onFrameRemovedEmitter = new Subject<Frame>();
+  private _onFrameNavigatedEmitter = new Subject<Frame>();
 
-  readonly onFrameAdded = this._onFrameAddedEmitter.event;
-  readonly onFrameRemoved = this._onFrameRemovedEmitter.event;
-  readonly onFrameNavigated = this._onFrameNavigatedEmitter.event;
+  readonly onFrameAdded = this._onFrameAddedEmitter.asObservable();
+  readonly onFrameRemoved = this._onFrameRemovedEmitter.asObservable();
+  readonly onFrameNavigated = this._onFrameNavigatedEmitter.asObservable();
 
   _frames: Map<string, Frame> = new Map();
 
@@ -48,7 +48,7 @@ export class FrameModel {
     this._frames.set(frame.id, frame);
     if (frame.isMainFrame())
       this._mainFrame = frame;
-    this._onFrameAddedEmitter.fire(frame);
+    this._onFrameAddedEmitter.next(frame);
     return frame;
   }
 
@@ -67,7 +67,7 @@ export class FrameModel {
       frame = this._frameAttached(cdp, targetId, framePayload.id, framePayload.parentId);
     }
     frame._navigate(framePayload, targetId);
-    this._onFrameNavigatedEmitter.fire(frame);
+    this._onFrameNavigatedEmitter.next(frame);
   }
 
   _frameDetached(cdp: Cdp.Api, targetId: Cdp.Target.TargetID, frameId: Cdp.Page.FrameId) {
@@ -90,7 +90,7 @@ export class FrameModel {
     let frame = this._frames.get(framePayload.id);
     if (frame) {
       frame._navigate(framePayload, targetId);
-      this._onFrameNavigatedEmitter.fire(frame);
+      this._onFrameNavigatedEmitter.next(frame);
     } else {
       frame = this._addFrame(cdp, framePayload.id, parentFrameId);
       frame._navigate(framePayload, targetId);
@@ -172,7 +172,7 @@ export class Frame {
       return;
     this._unrefChildFrames(targetId);
     this.model._frames.delete(this.id);
-    this.model._onFrameRemovedEmitter.fire(this);
+    this.model._onFrameRemovedEmitter.next(this);
   }
 
   displayName(): string {

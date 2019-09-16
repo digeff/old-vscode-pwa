@@ -1,26 +1,27 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
-import * as vscode from 'vscode';
 import CdpConnection from '../../cdp/connection';
 import * as launcher from './launcher';
 import { BrowserTarget, BrowserTargetManager } from './browserTargets';
 import { Target, Launcher } from '../targets';
 import { BrowserSourcePathResolver } from './browserPathResolver';
 import { baseURL, LaunchParams } from './browserLaunchParams';
+import { Subject, Subscription } from 'rxjs';
+import { first } from 'rxjs/operators';
 
 export class BrowserAttacher implements Launcher {
   private _rootPath: string | undefined;
   private _attemptTimer: NodeJS.Timer | undefined;
   private _connection: CdpConnection | undefined;
   private _targetManager: BrowserTargetManager | undefined;
+  private _subscriptions: Subscription[] = [];
   private _launchParams: LaunchParams | undefined;
   private _targetOrigin: any;
-  private _disposables: vscode.Disposable[] = [];
-  private _onTerminatedEmitter = new vscode.EventEmitter<void>();
-  readonly onTerminated = this._onTerminatedEmitter.event;
-  private _onTargetListChangedEmitter = new vscode.EventEmitter<void>();
-  readonly onTargetListChanged = this._onTargetListChangedEmitter.event;
+  private _onTerminatedEmitter = new Subject<void>();
+  readonly onTerminated = this._onTerminatedEmitter.asObservable();
+  private _onTargetListChangedEmitter = new Subject<void>();
+  readonly onTargetListChanged = this._onTargetListChangedEmitter.asObservable();
 
   constructor(rootPath: string | undefined) {
     this._rootPath = rootPath;
@@ -31,9 +32,7 @@ export class BrowserAttacher implements Launcher {
   }
 
   dispose() {
-    for (const disposable of this._disposables)
-      disposable.dispose();
-    this._disposables = [];
+    this._subscriptions.forEach(x => x.unsubscribe());
     if (this._attemptTimer)
       clearTimeout(this._attemptTimer);
     if (this._targetManager)
@@ -70,30 +69,30 @@ export class BrowserAttacher implements Launcher {
     }
 
     this._connection = connection;
-    connection.onDisconnected(() => {
+    connection.onDisconnected.pipe(first()).subscribe(() => {
       this._connection = undefined;
       if (this._targetManager) {
         this._targetManager.dispose();
         this._targetManager = undefined;
-        this._onTargetListChangedEmitter.fire();
+        this._onTargetListChangedEmitter.next();
       }
       if (this._launchParams)
         this._scheduleAttach();
-    }, undefined, this._disposables);
+    });
 
     const pathResolver = new BrowserSourcePathResolver(baseURL(params), params.webRoot || this._rootPath);
     this._targetManager = await BrowserTargetManager.connect(connection, pathResolver, this._targetOrigin);
     if (!this._targetManager)
       return;
 
-    this._targetManager.serviceWorkerModel.onDidChange(() => this._onTargetListChangedEmitter.fire());
-    this._targetManager.frameModel.onFrameNavigated(() => this._onTargetListChangedEmitter.fire());
-    this._targetManager.onTargetAdded((target: BrowserTarget) => {
-      this._onTargetListChangedEmitter.fire();
-    });
-    this._targetManager.onTargetRemoved((target: BrowserTarget) => {
-      this._onTargetListChangedEmitter.fire();
-    });
+    this._subscriptions.push(this._targetManager.serviceWorkerModel.onDidChange.subscribe(() => this._onTargetListChangedEmitter.next()));
+    this._subscriptions.push(this._targetManager.frameModel.onFrameNavigated.subscribe(() => this._onTargetListChangedEmitter.next()));
+    this._subscriptions.push(this._targetManager.onTargetAdded.subscribe((target: BrowserTarget) => {
+      this._onTargetListChangedEmitter.next();
+    }));
+    this._subscriptions.push(this._targetManager.onTargetRemoved.subscribe((target: BrowserTarget) => {
+      this._onTargetListChangedEmitter.next();
+    }));
     this._targetManager.waitForMainTarget();
   }
 

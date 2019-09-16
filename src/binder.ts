@@ -1,10 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
-import { Disposable, EventEmitter } from 'vscode';
 import { DebugAdapter } from './adapter/debugAdapter';
 import { Thread } from './adapter/threads';
 import { Launcher, Target } from './targets/targets';
+import { Subject, Subscription } from 'rxjs';
+import { first } from 'rxjs/operators';
+import { Disposable } from './events/disposable';
 
 export interface BinderDelegate {
   acquireDebugAdapter(target: Target): Promise<DebugAdapter>;
@@ -13,12 +15,12 @@ export interface BinderDelegate {
 
 export class Binder implements Disposable {
   private _delegate: BinderDelegate;
-  private _disposables: Disposable[];
+  private _subscriptions: Subscription[] = [];
   private _threads = new Map<Target, {thread: Thread, debugAdapter: DebugAdapter}>();
   private _launchers = new Set<Launcher>();
   private _terminationCount = 0;
-  private _onTargetListChangedEmitter = new EventEmitter<void>();
-  readonly onTargetListChanged = this._onTargetListChangedEmitter.event;
+  private _onTargetListChangedEmitter = new Subject<void>();
+  readonly onTargetListChanged = this._onTargetListChangedEmitter.asObservable();
   private _debugAdapter: DebugAdapter;
   private _targetOrigin: any;
 
@@ -26,16 +28,15 @@ export class Binder implements Disposable {
     this._delegate = delegate;
     this._debugAdapter = debugAdapter;
     this._targetOrigin = targetOrigin;
-    this._disposables = [this._onTargetListChangedEmitter];
 
     for (const launcher of launchers) {
       this._launchers.add(launcher);
-      launcher.onTargetListChanged(() => {
+      this._subscriptions.push(launcher.onTargetListChanged.subscribe(() => {
         const targets = this.targetList();
         this._attachToNewTargets(targets);
         this._detachOrphaneThreads(targets);
-        this._onTargetListChangedEmitter.fire();
-      }, undefined, this._disposables);
+        this._onTargetListChangedEmitter.next();
+      }));
     }
 
     debugAdapter.dap.on('launch', async params => {
@@ -74,20 +75,19 @@ export class Binder implements Disposable {
 
   _listenToTermination(launcher: Launcher) {
     ++this._terminationCount;
-    launcher.onTerminated(() => {
+    launcher.onTerminated.pipe(first()).subscribe(() => {
       this._launchers.delete(launcher);
       this._detachOrphaneThreads(this.targetList());
-      this._onTargetListChangedEmitter.fire();
+      this._onTargetListChangedEmitter.next();
       --this._terminationCount;
       if (!this._terminationCount)
         this._debugAdapter.dap.terminated({});
-    }, undefined, this._disposables);
+    });
   }
 
   dispose() {
-    for (const disposable of this._disposables)
-      disposable.dispose();
-    this._disposables = [];
+    for (const subscription of this._subscriptions)
+      subscription.unsubscribe();
     for (const launcher of this._launchers)
       launcher.dispose();
     this._launchers.clear();

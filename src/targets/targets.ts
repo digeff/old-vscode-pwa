@@ -2,13 +2,14 @@
 // Licensed under the MIT license.
 
 import Cdp from '../cdp/api';
-import { Event, Disposable } from 'vscode';
 import { InlineScriptOffset, SourcePathResolver } from '../common/sourcePathResolver';
+import { Disposable } from '../events/disposable';
+import { Observable } from 'rxjs';
 
 export interface Target {
   id(): string;
   name(): string;
-  onNameChanged: Event<void>;
+  onNameChanged: Observable<string>;
   fileName(): string | undefined;
   type(): string;
   parent(): Target | undefined;
@@ -39,7 +40,7 @@ export interface Launcher extends Disposable {
   terminate(): Promise<void>;
   disconnect(): Promise<void>;
   restart(): Promise<void>;
-  onTargetListChanged: Event<void>;
-  onTerminated: Event<void>;
+  onTargetListChanged: Observable<void>;
+  onTerminated: Observable<void>;
   targetList(): Target[];
 }

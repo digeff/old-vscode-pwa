@@ -41,7 +41,7 @@ class BreakpointsDataProvider implements vscode.TreeDataProvider<Breakpoint> {
     const sendState = (adapter: DebugAdapter) => {
       adapter.enableCustomBreakpoints(this.breakpoints.filter(b => b.enabled).map(b => b.id));
     };
-    factory.onAdapterAdded(sendState);
+    factory.onAdapterAdded.subscribe(sendState);
     factory.adapters().forEach(sendState);
   }
 

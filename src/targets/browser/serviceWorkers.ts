@@ -1,10 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
-import * as vscode from 'vscode';
 import Cdp from '../../cdp/api';
 import { FrameModel } from './frames';
 import { URL } from 'url';
+import { Subject } from 'rxjs';
+import { Disposable } from '../../events/disposable';
 
 export class ServiceWorkerRegistration {
   readonly versions = new Map<string, ServiceWorkerVersion>();
@@ -70,13 +71,13 @@ export class ServiceWorkerVersion  {
 
 export type ServiceWorkerMode = 'normal' | 'bypass' | 'force';
 
-export class ServiceWorkerModel implements vscode.Disposable {
+export class ServiceWorkerModel implements Disposable {
   private _registrations = new Map<Cdp.ServiceWorker.RegistrationID, ServiceWorkerRegistration>();
   private _versions = new Map<Cdp.Target.TargetID, ServiceWorkerVersion>();
   private _frameModel: FrameModel;
   private _cdp: Cdp.Api | undefined;
-  private _onDidChangeUpdater = new vscode.EventEmitter<void>();
-  readonly onDidChange = this._onDidChangeUpdater.event;
+  private _onDidChangeUpdater = new Subject<void>();
+  readonly onDidChange = this._onDidChangeUpdater.asObservable();
   private _targets = new Set<Cdp.Api>();
   private static _mode: ServiceWorkerMode;
   private static _instances = new Set<ServiceWorkerModel>();
@@ -146,7 +147,7 @@ export class ServiceWorkerModel implements vscode.Disposable {
         registration.versions.delete(version.id);
       }
     }
-    this._onDidChangeUpdater.fire();
+    this._onDidChangeUpdater.next();
   }
 
   _workerRegistrationsUpdated(payloads: Cdp.ServiceWorker.ServiceWorkerRegistration[]): void {
@@ -160,7 +161,7 @@ export class ServiceWorkerModel implements vscode.Disposable {
         this._registrations.set(payload.registrationId, new ServiceWorkerRegistration(payload));
       }
     }
-    this._onDidChangeUpdater.fire();
+    this._onDidChangeUpdater.next();
   }
 
   static setModeForAll(mode: ServiceWorkerMode) {

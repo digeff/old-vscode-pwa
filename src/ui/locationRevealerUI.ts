@@ -28,7 +28,7 @@ export class LocationRevealerUI {
       }
     }));
     factory.adapters().forEach(adapter => this._install(adapter));
-    factory.onAdapterAdded(adapter => this._install(adapter))
+    factory.onAdapterAdded.subscribe(adapter => this._install(adapter))
   }
 
   _install(adapter: DebugAdapter): void {
