@@ -10,6 +10,7 @@ import * as sourceUtils from '../utils/sourceUtils';
 import { prettyPrintAsSourceMap } from '../utils/sourceUtils';
 import * as utils from '../utils/urlUtils';
 import * as errors from '../dap/errors';
+import { PathMap } from '../utils/pathMap';
 
 const localize = nls.loadMessageBundle();
 
@@ -236,8 +237,7 @@ export class SourceContainer {
 
   private _sourceByReference: Map<number, Source> = new Map();
   private _sourceMapSourcesByUrl: Map<string, Source> = new Map();
-  private _sourceByAbsolutePath: Map<string, Source> = new Map();
-
+  private _sourceByAbsolutePath: PathMap<Source> = new PathMap();
   // All source maps by url.
   _sourceMaps: Map<string, SourceMapData> = new Map();
   private _revealer?: UiLocationRevealer;
