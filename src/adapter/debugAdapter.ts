@@ -80,12 +80,6 @@ export class DebugAdapterImplementation implements DebugAdapter {
     this.sourceContainer = new SourceContainer(this.dap, rootPath);
     this.breakpointManager = new BreakpointManager(this.dap, this.sourceContainer);
 
-  private async _onInitialize(params: Dap.InitializeParams): Promise<Dap.InitializeResult | Dap.Error> {
-    this._initializeParams = params;
-
-    console.assert(params.linesStartAt1);
-    console.assert(params.columnsStartAt1);
-
     // TODO PWA: await this._v3DebugAdapter!.processRequest('initialize', this._initializeParams, this._telemetryCollector);
 
     this.dap.initialized({});
