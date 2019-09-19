@@ -40,9 +40,8 @@ export class BrowserLauncher implements Launcher {
     return this._targetManager;
   }
 
-  async _launchBrowser(args: string[]): Promise<CdpConnection> {
+  async _launchBrowser(executablePath: string = findBrowser()[0], args: string[]): Promise<CdpConnection> {
     // Prefer canary over stable, it comes earlier in the list.
-    const executablePath = findBrowser()[0];
     if (!executablePath)
       throw new Error('Unable to find browser');
 
@@ -58,10 +57,14 @@ export class BrowserLauncher implements Launcher {
       });
   }
 
-  async prepareLaunch(params: LaunchParams, args: string[], targetOrigin: any): Promise<BrowserTarget | Dap.Error> {
+  async prepareLaunch(params: LaunchParams, targetOrigin: any): Promise<BrowserTarget | Dap.Error> {
     let connection: CdpConnection;
+    const args = params.runtimeArgs || [];
+    if(params.port != null) {
+      args.push(`--remote-debugging-port=${params.port}`);
+    }
     try {
-      connection = await this._launchBrowser(args);
+      connection = await this._launchBrowser(params.runtimeExecutable, args);
     } catch (e) {
       return errors.createUserError(localize('error.executableNotFound', 'Unable to find browser executable'));
     }
@@ -107,7 +110,7 @@ export class BrowserLauncher implements Launcher {
   async launch(params: any, targetOrigin: any): Promise<boolean> {
     if (!('url' in params))
       return false;
-    const result = await this.prepareLaunch(params as LaunchParams, [], targetOrigin);
+    const result = await this.prepareLaunch(params as LaunchParams, targetOrigin);
     if (!(result instanceof BrowserTarget))
       return false;
     await this.finishLaunch(result);

@@ -6,9 +6,11 @@ import { URL } from "url";
 
 export interface LaunchParams extends Dap.LaunchParams {
   url?: string;
-  remoteDebuggingPort?: string;
+  port?: string;
   baseURL?: string;
   webRoot?: string;
+  runtimeExecutable?: string;
+  runtimeArgs?: string[];
 }
 
 export function baseURL(params: LaunchParams): string | undefined {

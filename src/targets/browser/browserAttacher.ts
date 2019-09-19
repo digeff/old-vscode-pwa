@@ -40,7 +40,7 @@ export class BrowserAttacher implements Launcher {
   }
 
   async launch(params: any, targetOrigin: any): Promise<boolean> {
-    if (!('remoteDebuggingPort' in params))
+    if (params.port == null)
       return false;
 
     this._launchParams = params;
@@ -60,7 +60,7 @@ export class BrowserAttacher implements Launcher {
     const params = this._launchParams!;
     let connection: CdpConnection | undefined;
     try {
-      connection = await launcher.attach({ browserURL: `http://localhost:${params.remoteDebuggingPort}` });
+      connection = await launcher.attach({ browserURL: `http://localhost:${params.port}` });
     } catch (e) {
     }
     if (!connection) {
