@@ -7,19 +7,38 @@ import Dap from '../dap/api';
 import * as sourceUtils from '../utils/sourceUtils';
 import * as urlUtils from '../utils/urlUtils';
 import * as errors from '../dap/errors';
-import { UiLocation, SourceContainer } from './sources';
+import { UiLocation, SourceContainer, ISourceContainer } from './sources';
 import { Thread, UIDelegate, ThreadDelegate, PauseOnExceptionsState } from './threads';
 import { VariableStore } from './variables';
-import { BreakpointManager } from './breakpoints';
+import { BreakpointManager, IBreakpointManager } from './breakpoints';
 import { Cdp } from '../cdp/api';
 import { CustomBreakpointId } from './customBreakpoints';
+import { ChromeDebugAdapter } from 'vscode-chrome-debug-core';
+import { DapApiToChromeDebugSessionAdapter } from './v3/chromeDebugSession';
+import { NullExecutionTimingsReporter } from './v3/executionTimingsReporter';
+import { NullTelemetryPropertyCollector } from './v3/telemetryPropertyCollector';
+import { customizedChromeDebugOptions } from './v3/chromeDebugOptions';
 
 const localize = nls.loadMessageBundle();
 const revealUiLocationThreadId = 999999999;
 
+export interface DebugAdapter {
+  readonly sourceContainer: ISourceContainer;
+  readonly breakpointManager: IBreakpointManager;
+  readonly dap: Dap.Api;
+
+  createThread(threadName: string, cdp: Cdp.Api, delegate: ThreadDelegate): Promise<Thread>;
+
+  enableCustomBreakpoints(ids: CustomBreakpointId[]): Promise<void>;
+  disableCustomBreakpoints(ids: CustomBreakpointId[]): Promise<void>;
+  revealUiLocation(uiLocation: UiLocation, revealConfirmed: Promise<void>);
+
+  dispose();
+}
+
 // This class collects configuration issued before "launch" request,
 // to be applied after launch.
-export class DebugAdapter {
+export class DebugAdapterImplementation implements DebugAdapter {
   readonly dap: Dap.Api;
   readonly sourceContainer: SourceContainer;
   readonly breakpointManager: BreakpointManager;
@@ -29,6 +48,11 @@ export class DebugAdapter {
   private _customBreakpoints = new Set<string>();
   private _thread: Thread | undefined;
   private _uiDelegate: UIDelegate;
+
+  private _initializeParams: Dap.InitializeParams | undefined;
+  private _v3DebugAdapter: ChromeDebugAdapter | undefined;
+
+  private readonly _telemetryCollector = new NullTelemetryPropertyCollector;
 
   constructor(dap: Dap.Api, rootPath: string | undefined, uiDelegate: UIDelegate) {
     this.dap = dap;
@@ -56,14 +80,23 @@ export class DebugAdapter {
     this.sourceContainer = new SourceContainer(this.dap, rootPath);
     this.breakpointManager = new BreakpointManager(this.dap, this.sourceContainer);
 
+  private async _onInitialize(params: Dap.InitializeParams): Promise<Dap.InitializeResult | Dap.Error> {
+    this._initializeParams = params;
+
+    console.assert(params.linesStartAt1);
+    console.assert(params.columnsStartAt1);
+
+    // TODO PWA: await this._v3DebugAdapter!.processRequest('initialize', this._initializeParams, this._telemetryCollector);
+
     this.dap.initialized({});
   }
 
-  async _onSetBreakpoints(params: Dap.SetBreakpointsParams): Promise<Dap.SetBreakpointsResult | Dap.Error> {
+  private async _onSetBreakpoints(params: Dap.SetBreakpointsParams): Promise<Dap.SetBreakpointsResult | Dap.Error> {
+    await this._v3DebugAdapter!.processRequest('setBreakpoints', params, this._telemetryCollector);
     return this.breakpointManager.setBreakpoints(params);
   }
 
-  async _onSetExceptionBreakpoints(params: Dap.SetExceptionBreakpointsParams): Promise<Dap.SetExceptionBreakpointsResult> {
+  private async _onSetExceptionBreakpoints(params: Dap.SetExceptionBreakpointsParams): Promise<Dap.SetExceptionBreakpointsResult> {
     this._pauseOnExceptionsState = 'none';
     if (params.filters.includes('caught'))
       this._pauseOnExceptionsState = 'all';
@@ -74,15 +107,15 @@ export class DebugAdapter {
     return {};
   }
 
-  async _onConfigurationDone(_: Dap.ConfigurationDoneParams): Promise<Dap.ConfigurationDoneResult> {
+  private async _onConfigurationDone(_: Dap.ConfigurationDoneParams): Promise<Dap.ConfigurationDoneResult> {
     return {};
   }
 
-  async _onLoadedSources(_: Dap.LoadedSourcesParams): Promise<Dap.LoadedSourcesResult> {
+  private async _onLoadedSources(_: Dap.LoadedSourcesParams): Promise<Dap.LoadedSourcesResult> {
     return { sources: await this.sourceContainer.loadedSources() };
   }
 
-  async _onSource(params: Dap.SourceParams): Promise<Dap.SourceResult | Dap.Error> {
+  private async _onSource(params: Dap.SourceParams): Promise<Dap.SourceResult | Dap.Error> {
     params.source!.path = urlUtils.platformPathToPreferredCase(params.source!.path);
     const source = this.sourceContainer.source(params.source!);
     if (!source)
@@ -93,7 +126,7 @@ export class DebugAdapter {
     return { content, mimeType: source.mimeType() };
   }
 
-  async _onThreads(_: Dap.ThreadsParams): Promise<Dap.ThreadsResult | Dap.Error> {
+  private async _onThreads(_: Dap.ThreadsParams): Promise<Dap.ThreadsResult | Dap.Error> {
     const threads: Dap.Thread[] = [];
     if (this._thread)
       threads.push({ id: 0, name: this._thread.name() });
@@ -102,7 +135,7 @@ export class DebugAdapter {
     return { threads };
   }
 
-  async _onStackTrace(params: Dap.StackTraceParams): Promise<Dap.StackTraceResult | Dap.Error> {
+  private async _onStackTrace(params: Dap.StackTraceParams): Promise<Dap.StackTraceResult | Dap.Error> {
     if (params.threadId === revealUiLocationThreadId)
       return this._syntheticStackTraceForSourceReveal(params);
     if (!this._thread)
@@ -110,7 +143,7 @@ export class DebugAdapter {
     return this._thread.stackTrace(params);
   }
 
-  _findVariableStore(variablesReference: number): VariableStore | undefined {
+  private _findVariableStore(variablesReference: number): VariableStore | undefined {
     if (!this._thread)
       return;
     if (this._thread.pausedVariables() && this._thread.pausedVariables()!.hasVariables(variablesReference))
@@ -119,14 +152,14 @@ export class DebugAdapter {
       return this._thread.replVariables;
   }
 
-  async _onVariables(params: Dap.VariablesParams): Promise<Dap.VariablesResult> {
+  private async _onVariables(params: Dap.VariablesParams): Promise<Dap.VariablesResult> {
     let variableStore = this._findVariableStore(params.variablesReference);
     if (!variableStore)
       return { variables: [] };
     return { variables: await variableStore.getVariables(params) };
   }
 
-  async _onSetVariable(params: Dap.SetVariableParams): Promise<Dap.SetVariableResult | Dap.Error> {
+  private async _onSetVariable(params: Dap.SetVariableParams): Promise<Dap.SetVariableResult | Dap.Error> {
     let variableStore = this._findVariableStore(params.variablesReference);
     if (!variableStore)
       return errors.createSilentError(localize('error.variableNotFound', 'Variable not found'));
@@ -134,13 +167,13 @@ export class DebugAdapter {
     return variableStore.setVariable(params);
   }
 
-  _withThread<T>(callback: (thread: Thread) => Promise<T>): Promise<T | Dap.Error> {
+  private _withThread<T>(callback: (thread: Thread) => Promise<T>): Promise<T | Dap.Error> {
     if (!this._thread)
       return Promise.resolve(this._threadNotAvailableError());
     return callback(this._thread);
   }
 
-  async revealUiLocation(uiLocation: UiLocation, revealConfirmed: Promise<void>) {
+  public async revealUiLocation(uiLocation: UiLocation, revealConfirmed: Promise<void>) {
     // 1. Report about a new thread.
     // 2. Report that thread has stopped.
     // 3. Wait for stackTrace call, return a single frame pointing to |location|.
@@ -169,7 +202,7 @@ export class DebugAdapter {
     }
   }
 
-  async _syntheticStackTraceForSourceReveal(params: Dap.StackTraceParams): Promise<Dap.StackTraceResult> {
+  private async _syntheticStackTraceForSourceReveal(params: Dap.StackTraceParams): Promise<Dap.StackTraceResult> {
     if (!this._uiLocationToReveal || params.startFrame)
       return { stackFrames: [] };
     return {
@@ -183,12 +216,22 @@ export class DebugAdapter {
     };
   }
 
-  _threadNotAvailableError(): Dap.Error {
+  private _threadNotAvailableError(): Dap.Error {
     return errors.createSilentError(localize('error.threadNotFound', 'Thread not found'));
   }
 
-  createThread(threadName: string, cdp: Cdp.Api, delegate: ThreadDelegate): Thread {
+  private async createV3DebugAdapter(cdp: Cdp.Api): Promise<void> {
+    this._v3DebugAdapter = new ChromeDebugAdapter(customizedChromeDebugOptions(cdp),
+      new DapApiToChromeDebugSessionAdapter(this.dap), new NullExecutionTimingsReporter());
+    await this._v3DebugAdapter.processRequest('initialize', this._initializeParams, this._telemetryCollector);
+    await this._v3DebugAdapter.processRequest('attachToExistingConnection', {}, this._telemetryCollector);
+  }
+
+  public async createThread(threadName: string, cdp: Cdp.Api, delegate: ThreadDelegate): Promise<Thread> {
+    // TODO PWA: await this._v3DebugAdapter!.processRequest('initialize', this._initializeParams, this._telemetryCollector);
     this._thread = new Thread(this.sourceContainer, threadName, cdp, this.dap, delegate, this._uiDelegate);
+    this.createV3DebugAdapter(cdp);
+
     for (const breakpoint of this._customBreakpoints)
       this._thread.updateCustomBreakpoint(breakpoint, true);
     this._thread.setPauseOnExceptionsState(this._pauseOnExceptionsState);
@@ -196,7 +239,7 @@ export class DebugAdapter {
     return this._thread;
   }
 
-  async enableCustomBreakpoints(ids: CustomBreakpointId[]): Promise<void> {
+  public async enableCustomBreakpoints(ids: CustomBreakpointId[]): Promise<void> {
     const promises: Promise<void>[] = [];
     for (const id of ids) {
       this._customBreakpoints.add(id);
@@ -206,7 +249,7 @@ export class DebugAdapter {
     await Promise.all(promises);
   }
 
-  async disableCustomBreakpoints(ids: CustomBreakpointId[]): Promise<void> {
+  public async disableCustomBreakpoints(ids: CustomBreakpointId[]): Promise<void> {
     const promises: Promise<void>[] = [];
     for (const id of ids) {
       this._customBreakpoints.delete(id);
@@ -216,7 +259,7 @@ export class DebugAdapter {
     await Promise.all(promises);
   }
 
-  dispose() {
+  public dispose() {
     for (const disposable of this._disposables)
       disposable.dispose();
     this._disposables = [];

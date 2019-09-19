@@ -3,7 +3,7 @@
 
 import * as path from 'path';
 import * as stream from 'stream';
-import { DebugAdapter } from '../adapter/debugAdapter';
+import { DebugAdapter, DebugAdapterImplementation } from '../adapter/debugAdapter';
 import { BrowserLauncher } from '../targets/browser/browserLauncher';
 import { BrowserTarget } from '../targets/browser/browserTargets';
 import Cdp from '../cdp/api';
@@ -47,7 +47,7 @@ export class Session implements vscode.Disposable {
 
     const workspaceRoot = utils.platformPathToPreferredCase(path.join(__dirname, '..', '..', 'testWorkspace'));
 
-    this.debugAdapter = new DebugAdapter(adapterConnection.dap(), workspaceRoot, {
+    this.debugAdapter = new DebugAdapterImplementation(adapterConnection.dap(), workspaceRoot, {
       copyToClipboard: text => log(`[copy to clipboard] ${text}`)
     });
     this.debugAdapter.sourceContainer.reportAllLoadedSourcesForTest();

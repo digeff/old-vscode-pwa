@@ -5,7 +5,7 @@
 import * as net from 'net';
 import * as queryString from 'querystring';
 import * as vscode from 'vscode';
-import { DebugAdapter } from './adapter/debugAdapter';
+import { DebugAdapter, DebugAdapterImplementation } from './adapter/debugAdapter';
 import { Source } from './adapter/sources';
 import { Binder, BinderDelegate } from './binder';
 import Dap from './dap/api';
@@ -49,7 +49,7 @@ export class Session implements Disposable {
         rootPath = debugSession.workspaceFolder.uri.path;
 
       const connection = new DapConnection(socket, socket);
-      this._debugAdapter = new DebugAdapter(connection.dap(), rootPath, {
+      this._debugAdapter = new DebugAdapterImplementation(connection.dap(), rootPath, {
         copyToClipboard: text => vscode.env.clipboard.writeText(text)
       });
 

@@ -159,7 +159,7 @@ export class Binder implements Disposable {
         return {};
       });
     }
-    const thread = debugAdapter.createThread(target.name(), cdp, target);
+    const thread = await debugAdapter.createThread(target.name(), cdp, target);
     this._threads.set(target, {thread, debugAdapter});
     cdp.Runtime.runIfWaitingForDebugger({});
   }
