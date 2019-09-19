@@ -18,6 +18,7 @@ import { Subject, Subscription } from 'rxjs';
 import { Disposable } from './events/disposable';
 
 import { Target } from './targets/targets';
+import { Terminal } from './abstractions/terminalDelegate';
 
 function checkVersion(version: string): boolean {
   const toNumber = (v: string): number => {
@@ -34,6 +35,7 @@ export class Session implements Disposable {
   private _debugAdapter?: DebugAdapter;
   private _binder?: Binder;
   private _onTargetNameChanged?: Subscription;
+  private _terminalListener?: Disposable;
 
   constructor(context: vscode.ExtensionContext, debugSession: vscode.DebugSession, target: Target | undefined, binderDelegate: BinderDelegate | undefined, callback: (debugAdapter: DebugAdapter) => void) {
     if (target && checkVersion('1.39.0'))
@@ -51,13 +53,16 @@ export class Session implements Disposable {
         copyToClipboard: text => vscode.env.clipboard.writeText(text)
       });
 
+      const forwardingSubject = new Subject<Terminal>();
+      this._terminalListener = vscode.window.onDidCloseTerminal(terminal => forwardingSubject.next(terminal));
+
       if (binderDelegate) {
         const launchers = [
-          new NodeLauncher(this._debugAdapter.sourceContainer.rootPath),
+          new NodeLauncher(this._debugAdapter.sourceContainer.rootPath, { createTerminal: (opts) => vscode.window.createTerminal(opts),  onDidCloseTerminal: forwardingSubject.asObservable() }),
           new BrowserLauncher(context.storagePath || context.extensionPath, this._debugAdapter.sourceContainer.rootPath),
           new BrowserAttacher(this._debugAdapter.sourceContainer.rootPath),
         ];
-        this._binder = new Binder(binderDelegate, this._debugAdapter, launchers, debugSession.id);
+        this._binder = new Binder(() => binderDelegate, this._debugAdapter!.dap, () => this._debugAdapter!, () => launchers, debugSession.id);
       }
 
       callback(this._debugAdapter);
@@ -79,6 +84,8 @@ export class Session implements Disposable {
       this._debugAdapter.dispose();
     if (this._onTargetNameChanged)
       this._onTargetNameChanged.unsubscribe();
+    if(this._terminalListener)
+      this._terminalListener.dispose();
     this._server.close();
   }
 }

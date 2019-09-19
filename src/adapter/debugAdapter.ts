@@ -34,7 +34,6 @@ export class DebugAdapter {
     this.dap = dap;
     this._uiDelegate = uiDelegate;
     rootPath = urlUtils.platformPathToPreferredCase(rootPath);
-    this.dap.on('initialize', params => this._onInitialize(params));
     this.dap.on('setBreakpoints', params => this._onSetBreakpoints(params));
     this.dap.on('setExceptionBreakpoints', params => this._onSetExceptionBreakpoints(params));
     this.dap.on('configurationDone', params => this._onConfigurationDone(params));
@@ -56,47 +55,8 @@ export class DebugAdapter {
     this.dap.on('exceptionInfo', params => this._withThread(thread => thread.exceptionInfo()));
     this.sourceContainer = new SourceContainer(this.dap, rootPath);
     this.breakpointManager = new BreakpointManager(this.dap, this.sourceContainer);
-  }
 
-  async _onInitialize(params: Dap.InitializeParams): Promise<Dap.InitializeResult | Dap.Error> {
-    console.assert(params.linesStartAt1);
-    console.assert(params.columnsStartAt1);
     this.dap.initialized({});
-    return {
-      supportsConfigurationDoneRequest: true,
-      supportsFunctionBreakpoints: false,
-      supportsConditionalBreakpoints: true,
-      supportsHitConditionalBreakpoints: false,
-      supportsEvaluateForHovers: true,
-      exceptionBreakpointFilters: [
-        { filter: 'caught', label: localize('breakpoint.caughtExceptions', 'Caught Exceptions'), default: false },
-        { filter: 'uncaught', label: localize('breakpoint.uncaughtExceptions', 'Uncaught Exceptions'), default: false },
-      ],
-      supportsStepBack: false,
-      supportsSetVariable: true,
-      supportsRestartFrame: true,
-      supportsGotoTargetsRequest: false,
-      supportsStepInTargetsRequest: false,
-      supportsCompletionsRequest: true,
-      supportsModulesRequest: false,
-      additionalModuleColumns: [],
-      supportedChecksumAlgorithms: [],
-      supportsRestartRequest: true,
-      supportsExceptionOptions: false,
-      supportsValueFormattingOptions: false,  // This is not used by vscode.
-      supportsExceptionInfoRequest: true,
-      supportTerminateDebuggee: false,
-      supportsDelayedStackTraceLoading: true,
-      supportsLoadedSourcesRequest: true,
-      supportsLogPoints: true,
-      supportsTerminateThreadsRequest: false,
-      supportsSetExpression: false,
-      supportsTerminateRequest: false,
-      completionTriggerCharacters: ['.', '[', '"', "'"]
-      //supportsDataBreakpoints: false,
-      //supportsReadMemoryRequest: false,
-      //supportsDisassembleRequest: false,
-    };
   }
 
   async _onSetBreakpoints(params: Dap.SetBreakpointsParams): Promise<Dap.SetBreakpointsResult | Dap.Error> {

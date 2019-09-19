@@ -26,6 +26,13 @@
       ],
       "preLaunchTask": "npm: watch"
     },
+
+    {
+      "name": "Launch as Debug Server",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/out/adapterLauncher.js"
+    },
     {
       "name": "Dogfood",
       "type": "pwa",

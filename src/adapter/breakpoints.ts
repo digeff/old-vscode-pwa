@@ -5,7 +5,6 @@ import { UiLocation, SourceContainer, Source, uiToRawOffset } from './sources';
 import Dap from '../dap/api';
 import Cdp from '../cdp/api';
 import { Thread, Script, ScriptWithSourceMapHandler } from './threads';
-import { Disposable } from 'vscode';
 import { BreakpointsPredictor } from './breakpointPredictor';
 import * as urlUtils from '../utils/urlUtils';
 
@@ -19,7 +18,6 @@ export class Breakpoint {
   _source: Dap.Source;
   private _condition?: string;
   private _lineColumn: LineColumn;
-  private _disposables: Disposable[] = [];
   private _activeSetters = new Set<Promise<void>>();
 
   private _resolvedBreakpoints = new Set<Cdp.Debugger.BreakpointId>();
@@ -183,10 +181,6 @@ export class Breakpoint {
   }
 
   async remove(): Promise<void> {
-    // This prevent any new setters from running.
-    for (const disposable of this._disposables)
-      disposable.dispose();
-    this._disposables = [];
     this._resolvedUiLocation = undefined;
 
     // Let all setters finish, so that we can remove all breakpoints including
@@ -210,7 +204,6 @@ export class BreakpointManager {
   _dap: Dap.Api;
   _sourceContainer: SourceContainer;
   _thread: Thread | undefined;
-  _disposables: Disposable[] = [];
   _resolvedBreakpoints = new Map<Cdp.Debugger.BreakpointId, Breakpoint>();
   _totalBreakpointsCount = 0;
   _scriptSourceMapHandler: ScriptWithSourceMapHandler;

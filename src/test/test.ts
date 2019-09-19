@@ -104,7 +104,7 @@ export class TestP {
 
     const storagePath = path.join(__dirname, '..', '..');
     this._browserLauncher = new BrowserLauncher(storagePath, this.adapter.sourceContainer.rootPath);
-    this.binder = new Binder(this, this.adapter, [this._browserLauncher], '0');
+    this.binder = new Binder(() => this, this.adapter.dap, () => this.adapter, () => [this._browserLauncher], '0');
     this.binder.considerLaunchedForTest(this._browserLauncher);
 
     this.initialize = this.dap.initialize({

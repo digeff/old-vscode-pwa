@@ -4,7 +4,6 @@
 import * as net from 'net';
 import * as os from 'os';
 import * as path from 'path';
-import * as vscode from 'vscode';
 import Cdp from '../../cdp/api';
 import Connection from '../../cdp/connection';
 import { PipeTransport } from '../../cdp/transport';
@@ -15,6 +14,7 @@ import * as utils from '../../utils/urlUtils';
 import { execFileSync } from 'child_process';
 import { Subject } from 'rxjs';
 import { first } from 'rxjs/operators';
+import { Terminal, TerminalDelegate } from '../../abstractions/terminalDelegate';
 
 export interface LaunchParams extends Dap.LaunchParams {
   command: string;
@@ -29,7 +29,7 @@ let counter = 0;
 export class NodeLauncher implements Launcher {
   private _rootPath: string | undefined;
   private _server: net.Server | undefined;
-  private _terminal: vscode.Terminal | undefined;
+  private _terminal: Terminal | undefined;
   private _connections: Connection[] = [];
   private _launchParams: LaunchParams | undefined;
   private _pipe: string | undefined;
@@ -42,7 +42,7 @@ export class NodeLauncher implements Launcher {
   _onTargetListChangedEmitter = new Subject<void>();
   readonly onTargetListChanged = this._onTargetListChangedEmitter.asObservable();
 
-  constructor(rootPath: string | undefined) {
+  constructor(rootPath: string | undefined, private terminalDelegate: TerminalDelegate) {
     this._rootPath = rootPath;
     this._pathResolver = new NodeSourcePathResolver();
   }
@@ -61,7 +61,7 @@ export class NodeLauncher implements Launcher {
     this._killRuntime();
 
     const launchParams = this._launchParams!;
-    this._terminal = vscode.window.createTerminal({
+    this._terminal = this.terminalDelegate.createTerminal({
       name: launchParams.command || 'Debugger terminal',
       cwd: launchParams.cwd || this._rootPath,
       env: this._buildEnv()
@@ -69,7 +69,7 @@ export class NodeLauncher implements Launcher {
     const args = (launchParams.args || []).map(arg => `"${arg}"`);
     const commandLine = [launchParams.command, ...args].join(' ');
     this._terminal.show();
-    vscode.window.onDidCloseTerminal(terminal => {
+    this.terminalDelegate.onDidCloseTerminal.subscribe(terminal => {
       if (terminal === this._terminal && !this._isRestarting) {
         this._stopServer();
         this._onTerminatedEmitter.next();
