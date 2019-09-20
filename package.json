@@ -35,14 +35,14 @@
   "dependencies": {
     "color": "^3.1.2",
     "debug": "^4.1.1",
+    "debugger-for-chrome": "file:../vscode-chrome-debug",
     "js-beautify": "^1.10.0",
     "rxjs": "^6.5.3",
     "source-map": "^0.7.3",
     "typescript": "^3.5.3",
-    "vscode-nls": "^4.1.1",
-    "ws": "^7.0.1",
-    "debugger-for-chrome": "file:../vscode-chrome-debug",
     "vscode-chrome-debug-core": "file:../vscode-chrome-debug-core",
+    "vscode-nls": "^4.1.1",
+    "ws": "^7.0.1"
   },
   "devDependencies": {
     "@pptr/testrunner": "^0.7.0",

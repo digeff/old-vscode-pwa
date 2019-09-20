@@ -1,5 +1,5 @@
 import { Binder, BinderDelegate } from "./binder";
-import { DebugAdapter } from "./adapter/debugAdapter";
+import { DebugAdapterImplementation } from "./adapter/debugAdapter";
 import DapConnection from './dap/connection';
 import { Target, Launcher } from "./targets/targets";
 import { NodeLauncher } from "./targets/node/nodeLauncher";
@@ -48,7 +48,7 @@ net.createServer(socket => {
     constructor(private rootPath: string) {}
 
     acquireDebugAdapter(target: Target) {
-      const da = new DebugAdapter(conn.dap(), this.rootPath, dummyUIDelegate);
+      const da = new DebugAdapterImplementation(conn.dap(), this.rootPath, dummyUIDelegate);
       target.attach().then(cdp => {
         if(cdp) {
           da.createThread(target.name(), cdp, target);
@@ -62,7 +62,7 @@ net.createServer(socket => {
     }
   }
 
-  _binder = new Binder((rootPath) => new MyBinderDelegate(rootPath), conn.dap(), (dap, rootPath) => new DebugAdapter(dap, rootPath, dummyUIDelegate) , launcherFactory, '');
+  _binder = new Binder((rootPath) => new MyBinderDelegate(rootPath), conn.dap(), (dap, rootPath) => new DebugAdapterImplementation(dap, rootPath, dummyUIDelegate) , launcherFactory, '');
 
 
 }).listen(4712);
