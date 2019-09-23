@@ -21,6 +21,8 @@ export class Binder implements Disposable {
   readonly onTargetListChanged = this._onTargetListChangedEmitter.event;
   private _debugAdapter: DebugAdapter;
   private _targetOrigin: any;
+  private _needsToAttach = true;
+
 
   constructor(delegate: BinderDelegate, debugAdapter: DebugAdapter, launchers: Launcher[], targetOrigin: any) {
     this._delegate = delegate;
@@ -32,7 +34,10 @@ export class Binder implements Disposable {
       this._launchers.add(launcher);
       launcher.onTargetListChanged(() => {
         const targets = this.targetList();
-        this._attachToNewTargets(targets);
+        if (this._needsToAttach || true) {
+          this._attachToNewTargets(targets);
+          this._needsToAttach = false;
+        }
         this._detachOrphaneThreads(targets);
         this._onTargetListChangedEmitter.fire();
       }, undefined, this._disposables);

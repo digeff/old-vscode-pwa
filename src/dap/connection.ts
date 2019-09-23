@@ -2,9 +2,9 @@
 // Licensed under the MIT license.
 
 import Dap from './api';
-import { debug } from 'debug';
+// import { debug } from 'debug';
 
-const debugDAP = debug('dap');
+const debugDAP = console.log; //debug('dap');
 
 interface Message {
   seq: number;
@@ -131,7 +131,7 @@ export default class Connection {
   _send(message: Message) {
     message.seq = this._sequence++;
     const json = JSON.stringify(message);
-    debugDAP('SEND ► ' + json);
+    debugDAP('DAP SEND ► ' + json);
     const data = `Content-Length: ${Buffer.byteLength(json, 'utf8')}\r\n\r\n${json}`;
     if (!this._writableStream) {
       console.error('Writing to a closed connection');
@@ -210,7 +210,7 @@ export default class Connection {
           if (message.length > 0) {
             try {
               let msg: Message = JSON.parse(message);
-              debugDAP('◀ RECV ' + msg);
+              debugDAP('DAP ◀ RECV ' + message);
               this._onMessage(msg);
             }
             catch (e) {

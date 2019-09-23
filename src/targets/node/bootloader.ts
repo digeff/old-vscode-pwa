@@ -10,6 +10,8 @@ function debugLog(text: string) {
 }
 
 (function() {
+  if (1 === 1) return;
+
   debugLog('args: ' + process.argv.join(' '));
   if (!process.env.NODE_INSPECTOR_IPC)
     return;
@@ -22,7 +24,7 @@ function debugLog(text: string) {
   } catch (e) {
   }
   // Do not run watchdog using electron executable, stick with the cli's one.
-  if (process.execPath.endsWith('node'))
+  if (process.execPath.endsWith('node') && process.argv.indexOf('node_modules\.bin\serve') === -1)
     process.env.NODE_INSPECTOR_EXEC_PATH = process.execPath;
 
   let scriptName = '';

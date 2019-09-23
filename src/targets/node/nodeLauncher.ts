@@ -155,7 +155,7 @@ export class NodeLauncher implements Launcher {
       NODE_INSPECTOR_EXEC_PATH: findNode() || ''
     };
     delete result['ELECTRON_RUN_AS_NODE'];
-    return result;
+    return {};
   }
 }
 

@@ -227,7 +227,18 @@ export class Source {
   }
 };
 
-export class SourceContainer {
+export interface ISourceContainer {
+  readonly rootPath: string | undefined;
+
+  revealUiLocation(uiLocation: UiLocation): Promise<void>;
+  preferredUiLocation(uiLocation: UiLocation): Promise<UiLocation>;
+  reportAllLoadedSourcesForTest(): void;
+  setFileContentOverrideForTest(absolutePath: string, content?: string): void;
+  setSourceMapTimeouts(sourceMapTimeouts: SourceMapTimeouts): void;
+  source(ref: Dap.Source): Source | undefined;
+}
+
+export class SourceContainer implements ISourceContainer {
   private _dap: Dap.Api;
   private _uiDelegate: UIDelegate;
   _brokenSourceMapReported = false;

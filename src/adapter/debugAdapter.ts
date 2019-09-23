@@ -1,24 +1,41 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
-import { Disposable } from '../utils/eventUtils';
 import * as nls from 'vscode-nls';
 import Dap from '../dap/api';
 import * as sourceUtils from '../utils/sourceUtils';
 import * as urlUtils from '../utils/urlUtils';
 import * as errors from '../dap/errors';
-import { SourceContainer } from './sources';
+import { SourceContainer, ISourceContainer } from './sources';
 import { Thread, UIDelegate, ThreadDelegate, PauseOnExceptionsState } from './threads';
 import { VariableStore } from './variables';
-import { BreakpointManager } from './breakpoints';
+import { BreakpointManager, IBreakpointManager } from './breakpoints';
 import { Cdp } from '../cdp/api';
 import { CustomBreakpointId } from './customBreakpoints';
 
+import { SetBreakpointsRequestHandler, createSetBreakpointsRequestHandler } from 'vscode-chrome-debug-core';
+import { DapApiToChromeDebugSessionAdapter } from './v3/chromeDebugSession';
+import { Disposable } from '../utils/eventUtils';
+
+
 const localize = nls.loadMessageBundle();
+
+export interface IDebugAdapter {
+  readonly sourceContainer: ISourceContainer;
+  readonly breakpointManager: IBreakpointManager;
+  readonly dap: Dap.Api;
+
+  createThread(threadName: string, cdp: Cdp.Api, delegate: ThreadDelegate): Thread;
+
+  enableCustomBreakpoints(ids: CustomBreakpointId[]): Promise<void>;
+  disableCustomBreakpoints(ids: CustomBreakpointId[]): Promise<void>;
+
+  dispose();
+}
 
 // This class collects configuration issued before "launch" request,
 // to be applied after launch.
-export class DebugAdapter {
+export class DebugAdapter implements IDebugAdapter {
   readonly dap: Dap.Api;
   readonly sourceContainer: SourceContainer;
   readonly breakpointManager: BreakpointManager;
@@ -27,6 +44,17 @@ export class DebugAdapter {
   private _customBreakpoints = new Set<string>();
   private _thread: Thread | undefined;
   private _uiDelegate: UIDelegate;
+
+  private _isV2Enabled = true;
+
+  private static classInstanceCounter = 0;
+  private readonly _instanceId = DebugAdapter.classInstanceCounter++;
+
+  private _setBreakpointsRequestHandler: SetBreakpointsRequestHandler | undefined;
+
+  public toString(): string {
+    return `DebugAdapter: ${this._instanceId}`;
+  }
 
   constructor(dap: Dap.Api, rootPath: string | undefined, uiDelegate: UIDelegate) {
     this.dap = dap;
@@ -98,7 +126,19 @@ export class DebugAdapter {
   }
 
   async _onSetBreakpoints(params: Dap.SetBreakpointsParams): Promise<Dap.SetBreakpointsResult | Dap.Error> {
-    return this.breakpointManager.setBreakpoints(params);
+    if (this._isV2Enabled) {
+      if (this._setBreakpointsRequestHandler)  {
+        console.log(`Calling V2 breakpoints for ${this._thread!.name()}`);
+        const result = await this._setBreakpointsRequestHandler!.setBreakpoints(<any>params);
+        console.log(`Called V2 breakpoints for ${this._thread!.name()}`);
+        return result;
+      } else {
+        throw new Error('failed');
+      }
+      } else {
+        console.log(`Calling PWA breakpoints for ${this._thread!.name()}`);
+        return this.breakpointManager.setBreakpoints(params);
+    }
   }
 
   async _onSetExceptionBreakpoints(params: Dap.SetExceptionBreakpointsParams): Promise<Dap.SetExceptionBreakpointsResult> {
@@ -187,7 +227,13 @@ export class DebugAdapter {
   }
 
   createThread(threadName: string, cdp: Cdp.Api, delegate: ThreadDelegate): Thread {
+    if (this._isV2Enabled) {
+      console.log(`Creating V2 for ${threadName}`);
+      this._setBreakpointsRequestHandler = createSetBreakpointsRequestHandler(<any>cdp, new DapApiToChromeDebugSessionAdapter(this.dap));
+      console.log(`Created V2 for ${threadName}`);
+    }
     this._thread = new Thread(this.sourceContainer, threadName, cdp, this.dap, delegate, this._uiDelegate);
+
     for (const breakpoint of this._customBreakpoints)
       this._thread.updateCustomBreakpoint(breakpoint, true);
     this._thread.setPauseOnExceptionsState(this._pauseOnExceptionsState);

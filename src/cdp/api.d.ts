@@ -4342,7 +4342,7 @@ export namespace Cdp {
      */
     export interface StepIntoParams {
       /**
-       * Debugger will issue additional Debugger.paused notification if any async task is scheduled
+       * Debugger will pause on the execution of the first async task which was scheduled
        * before next pause.
        */
       breakOnAsyncCall?: boolean;
@@ -4428,8 +4428,7 @@ export namespace Cdp {
       asyncStackTraceId?: Runtime.StackTraceId;
 
       /**
-       * Just scheduled async call will have this stack trace as parent stack during async execution.
-       * This field is available only after `Debugger.stepInto` call with `breakOnAsynCall` flag.
+       * Never present, will be removed.
        */
       asyncCallStackTraceId?: Runtime.StackTraceId;
     }
@@ -5426,6 +5425,11 @@ export namespace Cdp {
        * False to skip to the nearest non-UA shadow root ancestor (default: false).
        */
       includeUserAgentShadowDOM?: boolean;
+
+      /**
+       * Whether to ignore pointer-events: none on elements and hit test them.
+       */
+      ignorePointerEventsNone?: boolean;
     }
 
     /**
@@ -5436,6 +5440,11 @@ export namespace Cdp {
        * Resulting node.
        */
       backendNodeId: BackendNodeId;
+
+      /**
+       * Frame this node belongs to.
+       */
+      frameId: Page.FrameId;
 
       /**
        * Id of the node at given coordinates, only when enabled and requested document.
@@ -8471,7 +8480,15 @@ export namespace Cdp {
       /**
        * Response headers.
        */
-      responseHeaders: HeaderEntry[];
+      responseHeaders?: HeaderEntry[];
+
+      /**
+       * Alternative way of specifying response headers as a \0-separated
+       * series of name: value pairs. Prefer the above method unless you
+       * need to represent some non-UTF8 values that can't be transmitted
+       * over the protocol as text.
+       */
+      binaryResponseHeaders?: string;
 
       /**
        * A response body.
@@ -8480,7 +8497,7 @@ export namespace Cdp {
 
       /**
        * A textual representation of responseCode.
-       * If absent, a standard phrase mathcing responseCode is used.
+       * If absent, a standard phrase matching responseCode is used.
        */
       responsePhrase?: string;
     }
@@ -8778,6 +8795,8 @@ export namespace Cdp {
 
     /**
      * Issued when the target starts or stops needing BeginFrames.
+     * Deprecated. Issue beginFrame unconditionally instead and use result from
+     * beginFrame to detect whether the frames were suppressed.
      */
     on(event: 'needsBeginFramesChanged', listener: (event: HeadlessExperimental.NeedsBeginFramesChangedEvent) => void): void;
   }
@@ -13423,9 +13442,9 @@ export namespace Cdp {
      */
     export interface BlockedSetCookieWithReason {
       /**
-       * The reason this cookie was blocked.
+       * The reason(s) this cookie was blocked.
        */
-      blockedReason: SetCookieBlockedReason;
+      blockedReasons: SetCookieBlockedReason[];
 
       /**
        * The string representing this individual cookie as it would appear in the header.
@@ -13446,9 +13465,9 @@ export namespace Cdp {
      */
     export interface BlockedCookieWithReason {
       /**
-       * The reason the cookie was blocked.
+       * The reason(s) the cookie was blocked.
        */
-      blockedReason: CookieBlockedReason;
+      blockedReasons: CookieBlockedReason[];
 
       /**
        * The cookie object representing the cookie which was not sent.
@@ -20967,6 +20986,11 @@ export namespace Cdp {
     getCredentials(params: WebAuthn.GetCredentialsParams): Promise<WebAuthn.GetCredentialsResult | undefined>;
 
     /**
+     * Removes a credential from the authenticator.
+     */
+    removeCredential(params: WebAuthn.RemoveCredentialParams): Promise<WebAuthn.RemoveCredentialResult | undefined>;
+
+    /**
      * Clears all the credentials from the specified device.
      */
     clearCredentials(params: WebAuthn.ClearCredentialsParams): Promise<WebAuthn.ClearCredentialsResult | undefined>;
@@ -21076,6 +21100,21 @@ export namespace Cdp {
      */
     export interface GetCredentialsResult {
       credentials: Credential[];
+    }
+
+    /**
+     * Parameters of the 'WebAuthn.removeCredential' method.
+     */
+    export interface RemoveCredentialParams {
+      authenticatorId: AuthenticatorId;
+
+      credentialId: string;
+    }
+
+    /**
+     * Return value of the 'WebAuthn.removeCredential' method.
+     */
+    export interface RemoveCredentialResult {
     }
 
     /**

@@ -203,7 +203,13 @@ export class Breakpoint {
   }
 };
 
-export class BreakpointManager {
+export interface IBreakpointManager {
+  setPredictorDisabledForTest(disabled: boolean): void;
+  setSourceMapPauseDisabledForTest(disabled: boolean): void;
+  launchBlocker(): Promise<void>;
+}
+
+export class BreakpointManager implements IBreakpointManager {
   private _byPath: Map<string, Breakpoint[]> = new Map();
   private _byRef: Map<number, Breakpoint[]> = new Map();
 

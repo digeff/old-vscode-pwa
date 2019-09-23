@@ -2,11 +2,11 @@
 // Licensed under the MIT license.
 
 import { Transport } from './transport';
-import { debug } from 'debug';
-import { EventEmitter } from '../utils/eventUtils';
+//import { debug } from 'debug';
 import Cdp from './api';
+import { EventEmitter } from 'vscode';
 
-const debugConnection = debug('connection');
+const debugConnection = console.log; //debug('connection');
 
 interface ProtocolCommand {
   id: number;
@@ -70,13 +70,13 @@ export default class Connection {
     if (sessionId)
       message.sessionId = sessionId;
     const messageString = JSON.stringify(message);
-    debugConnection('SEND ► ' + messageString);
+    debugConnection('CDP SEND ► ' + messageString);
     this._transport.send(messageString);
     return id;
   }
 
   async _onMessage(message: string) {
-    debugConnection('◀ RECV ' + message);
+    debugConnection('CDP ◀ RECV ' + message);
     const object = JSON.parse(message);
 
     const session = this._sessions.get(object.sessionId || '');

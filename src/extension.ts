@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
+require('source-map-support').install();
+
 import * as vscode from 'vscode';
 import { CancellationToken, DebugConfiguration, ProviderResult, WorkspaceFolder } from 'vscode';
 import * as nls from 'vscode-nls';
