@@ -10,7 +10,6 @@ first.onchange = function() {
 }
 
 second.onchange = function() {
-  debugger; // Step _into_ the next line
   worker.postMessage([first.value, second.value]);
 }
 

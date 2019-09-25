@@ -137,6 +137,7 @@ export class DebugAdapter implements IDebugAdapter {
       }
       } else {
         console.log(`Calling PWA breakpoints for ${this._thread!.name()}`);
+        throw new Error('failed trying to use pwa');
         return this.breakpointManager.setBreakpoints(params);
     }
   }
@@ -229,7 +230,7 @@ export class DebugAdapter implements IDebugAdapter {
   createThread(threadName: string, cdp: Cdp.Api, delegate: ThreadDelegate): Thread {
     if (this._isV2Enabled) {
       console.log(`Creating V2 for ${threadName}`);
-      this._setBreakpointsRequestHandler = createSetBreakpointsRequestHandler(<any>cdp, new DapApiToChromeDebugSessionAdapter(this.dap));
+      this._setBreakpointsRequestHandler = createSetBreakpointsRequestHandler(<any>cdp, new DapApiToChromeDebugSessionAdapter(this.dap), this.sourceContainer.rootPath || '');
       console.log(`Created V2 for ${threadName}`);
     }
     this._thread = new Thread(this.sourceContainer, threadName, cdp, this.dap, delegate, this._uiDelegate);
