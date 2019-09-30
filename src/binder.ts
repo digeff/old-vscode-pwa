@@ -6,6 +6,9 @@ import { DebugAdapter } from './adapter/debugAdapter';
 import { Thread } from './adapter/threads';
 import { Launcher, Target } from './targets/targets';
 import * as errors from './dap/errors';
+import * as browserLaunchParams from './targets/browser/browserLaunchParams';
+import * as nodeLauncher from './targets/node/nodeLauncher';
+import { configureLoggerLevel } from './utils/logger';
 
 export interface BinderDelegate {
   acquireDebugAdapter(target: Target): Promise<DebugAdapter>;
@@ -39,7 +42,8 @@ export class Binder implements Disposable {
       }, undefined, this._disposables);
     }
 
-    debugAdapter.dap.on('launch', async params => {
+    debugAdapter.dap.on('launch', async (params: browserLaunchParams.LaunchParams | nodeLauncher.LaunchParams) => {
+      configureLoggerLevel(this._parseLogLevel(params.trace));
       await debugAdapter.breakpointManager.launchBlocker();
       let results = await Promise.all(launchers.map(l => this._launch(l, params)));
       results = results.filter(result => !!result);
@@ -59,6 +63,27 @@ export class Binder implements Disposable {
       await this._restart();
       return {};
     });
+  }
+
+  private _parseLogLevel(logLevel: unknown): string {
+    switch (logLevel) {
+      case 'error':
+        return 'error';
+      case 'warn':
+        return 'warn';
+      case 'info':
+        return 'info';
+      case 'verbose':
+        return 'verbose';
+      case undefined:
+        return 'none';
+      case false:
+        return 'none';
+      case true:
+        return 'info';
+      default:
+        return 'none';
+    }
   }
 
   async _restart() {

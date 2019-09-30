@@ -20,6 +20,7 @@ export interface LaunchParams extends Dap.LaunchParams {
   env?: Object;
   nodeFilter?: string;
   args?: string[];
+  trace?: boolean;
 }
 
 export interface ProgramLauncher extends Disposable {
