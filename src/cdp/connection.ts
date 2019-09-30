@@ -6,6 +6,7 @@ import { debug } from 'debug';
 import { EventEmitter } from '../utils/eventUtils';
 import Cdp from './api';
 import { loggerForModule } from '../utils/logger';
+import * as get from 'lodash.get';
 
 const debugConnection = debug('connection');
 const logger = loggerForModule('CDP');
@@ -81,13 +82,40 @@ export default class Connection {
   async _onMessage(message: string) {
     debugConnection('◀ RECV ' + message);
     const object = JSON.parse(message);
-    logger.infoJSON('Received', object);
+    this.logReceivedMessage(object);
 
     const session = this._sessions.get(object.sessionId || '');
     if (session)
       session._onMessage(object);
     else
       throw new Error(`Unknown session id: ${object.sessionId}`)
+  }
+
+  private logReceivedMessage(messageObject: any) {
+    // Don't log Network activity notifications, they are usually too many
+    if (messageObject && !(messageObject.method && messageObject.method.startsWith('Network.'))) {
+
+      let restoreOriginalObject = () => {};
+      if (messageObject.result && messageObject.result.scriptSource) {
+        // If this message contains the source of a script, we log everything but the source
+        messageObject.result.scriptSource = '<removed script source for logs>';
+        msgStr = JSON.stringify(messageObject);
+      } else if (messageObject.result && messageObject.result.content) {
+        // Don't log responses to Page.getResourceContent (It's source code)
+        messageObject.result.content = '<removed content for logs>';
+        msgStr = JSON.stringify(messageObject);
+      } else if ((_.get(messageObject, 'params.sourceMapURL', '').startsWith('data:application/json'))) {
+        // If this message contains a source map url, we log everything else
+        messageObject.params.sourceMapURL = '<removed source map url for logs>';
+        msgStr = JSON.stringify(messageObject);
+      }
+
+      // Log the message
+      logger.infoJSON('Received', messageObject);
+
+      // Restore any properties that were modified
+      restoreOriginalObject();
+    }
   }
 
   _onTransportClose() {
