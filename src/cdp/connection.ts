@@ -5,8 +5,10 @@ import { Transport } from './transport';
 import { debug } from 'debug';
 import { EventEmitter } from '../utils/eventUtils';
 import Cdp from './api';
+import { loggerForModule } from '../utils/logger';
 
 const debugConnection = debug('connection');
+const logger = loggerForModule('CDP');
 
 interface ProtocolCommand {
   id: number;
@@ -71,6 +73,7 @@ export default class Connection {
       message.sessionId = sessionId;
     const messageString = JSON.stringify(message);
     debugConnection('SEND ► ' + messageString);
+    logger.infoJSON('Sending', message);
     this._transport.send(messageString);
     return id;
   }
@@ -78,6 +81,7 @@ export default class Connection {
   async _onMessage(message: string) {
     debugConnection('◀ RECV ' + message);
     const object = JSON.parse(message);
+    logger.infoJSON('Received', object);
 
     const session = this._sessions.get(object.sessionId || '');
     if (session)

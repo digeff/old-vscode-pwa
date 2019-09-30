@@ -3,8 +3,10 @@
 
 import Dap from './api';
 import { debug } from 'debug';
+import { loggerForFile } from '../utils/logger';
 
 const debugDAP = debug('dap');
+const logger = loggerForFile(__filename);
 
 interface Message {
   seq: number;
@@ -131,6 +133,7 @@ export default class Connection {
   _send(message: Message) {
     message.seq = this._sequence++;
     const json = JSON.stringify(message);
+    logger.infoJSON('Sending', message);
     debugDAP('SEND ► ' + json);
     const data = `Content-Length: ${Buffer.byteLength(json, 'utf8')}\r\n\r\n${json}`;
     if (!this._writableStream) {
@@ -210,6 +213,7 @@ export default class Connection {
           if (message.length > 0) {
             try {
               let msg: Message = JSON.parse(message);
+              logger.infoJSON('Recived', msg);
               debugDAP('◀ RECV ' + msg);
               this._onMessage(msg);
             }

@@ -2,12 +2,10 @@
 // Licensed under the MIT license.
 
 import * as net from 'net';
-import * as queryString from 'querystring';
 import * as vscode from 'vscode';
 import { DebugAdapter } from './adapter/debugAdapter';
-import { Source, UiLocation } from './adapter/sources';
+import { UiLocation } from './adapter/sources';
 import { Binder, BinderDelegate } from './binder';
-import Dap from './dap/api';
 import DapConnection from './dap/connection';
 import { SessionManager } from './sessionManager';
 import { BrowserLauncher } from './targets/browser/browserLauncher';
