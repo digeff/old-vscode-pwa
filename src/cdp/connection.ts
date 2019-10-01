@@ -7,6 +7,7 @@ import { EventEmitter } from '../utils/eventUtils';
 import Cdp from './api';
 import { loggerForModule } from '../utils/logger';
 import * as get from 'lodash.get';
+import * as set from 'lodash.set';
 
 const debugConnection = debug('connection');
 const logger = loggerForModule('CDP');
@@ -95,26 +96,32 @@ export default class Connection {
     // Don't log Network activity notifications, they are usually too many
     if (messageObject && !(messageObject.method && messageObject.method.startsWith('Network.'))) {
 
-      let restoreOriginalObject = () => {};
-      if (messageObject.result && messageObject.result.scriptSource) {
-        // If this message contains the source of a script, we log everything but the source
-        messageObject.result.scriptSource = '<removed script source for logs>';
-        msgStr = JSON.stringify(messageObject);
-      } else if (messageObject.result && messageObject.result.content) {
+      let propertyToStrip: string | undefined;
+      if (get(messageObject, 'result.scriptSource')) {
+        // Don't log script sources
+        propertyToStrip = 'result.scriptSource';
+      } else if (get(messageObject, 'result.content')) {
         // Don't log responses to Page.getResourceContent (It's source code)
-        messageObject.result.content = '<removed content for logs>';
-        msgStr = JSON.stringify(messageObject);
-      } else if ((_.get(messageObject, 'params.sourceMapURL', '').startsWith('data:application/json'))) {
-        // If this message contains a source map url, we log everything else
-        messageObject.params.sourceMapURL = '<removed source map url for logs>';
-        msgStr = JSON.stringify(messageObject);
+        propertyToStrip = 'messageObject.result.content';
+      } else if ((get(messageObject, 'params.sourceMapURL', '').startsWith('data:application/json'))) {
+        // If this message contains a source map url, we don't log it
+        propertyToStrip = 'messageObject.params.sourceMapURL';
       }
 
-      // Log the message
-      logger.infoJSON('Received', messageObject);
+      if (propertyToStrip !== undefined) {
+        // Remove the sensitive property
+        const originalValue = get(messageObject, propertyToStrip);
+        set(messageObject, propertyToStrip, '<sensitive property removed for logs>');
 
-      // Restore any properties that were modified
-      restoreOriginalObject();
+        // Log the message
+        logger.infoJSON('Received', messageObject);
+
+        // Restore the original value to the property
+        set(messageObject, propertyToStrip, originalValue);
+      } else {
+        // Just log the message
+        logger.infoJSON('Received', messageObject);
+      }
     }
   }
 
