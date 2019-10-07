@@ -6,8 +6,8 @@ import { debug } from 'debug';
 import { EventEmitter } from '../utils/eventUtils';
 import Cdp from './api';
 import { loggerForModule } from '../utils/logger';
-import * as get from 'lodash.get';
-import * as set from 'lodash.set';
+const get = require('lodash.get');
+const set = require('lodash.set');
 
 const debugConnection = debug('connection');
 const logger = loggerForModule('CDP');

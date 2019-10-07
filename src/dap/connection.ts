@@ -133,7 +133,7 @@ export default class Connection {
   _send(message: Message) {
     message.seq = this._sequence++;
     const json = JSON.stringify(message);
-    logger.infoJSON('Sending', message);
+    this.logSendingMessage(message);
     debugDAP('SEND ► ' + json);
     const data = `Content-Length: ${Buffer.byteLength(json, 'utf8')}\r\n\r\n${json}`;
     if (!this._writableStream) {
@@ -141,6 +141,20 @@ export default class Connection {
       return;
     }
     this._writableStream.write(data, 'utf8');
+  }
+
+  private logSendingMessage(message: Message) {
+    if (message.command === 'source') {
+      const args = <Dap.SourceResult>message.body;
+      if (args.content) {
+        const originalValue = args.content;
+        args.content = '<sensitive property removed for logs>';
+        logger.infoJSON('Sending', message);
+        args.content = originalValue;
+      }
+    } else {
+      logger.infoJSON('Sending', message);
+    }
   }
 
   async _onMessage(msg: Message): Promise<void> {
