@@ -36,6 +36,8 @@
   "dependencies": {
     "color": "^3.1.2",
     "js-beautify": "^1.10.0",
+    "lodash.groupby": "^4.6.0",
+    "lodash.mapvalues": "^4.6.0",
     "long": "^4.0.0",
     "source-map": "^0.7.3",
     "typescript": "^3.5.3",
@@ -68,6 +70,9 @@
     "@types/puppeteer": "^1.20.2",
     "@types/request-promise-native": "^1.0.17",
     "@types/sinon": "^7.5.0",
+    "@types/lodash.groupby": "^4.6.6",
+    "@types/lodash.mapvalues": "^4.6.6",
+    "@types/long": "^4.0.0",
     "@types/ws": "^6.0.1",
     "chai": "^4.2.0",
     "chai-string": "^1.5.0",

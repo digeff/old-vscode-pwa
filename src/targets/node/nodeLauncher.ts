@@ -28,6 +28,7 @@ import { IProgramLauncher } from './processLauncher';
 import { CallbackFile } from './callback-file';
 import { RestartPolicyFactory } from './restartPolicy';
 import { delay } from '../../common/promiseUtil';
+import { RawTelemetryReporterToDap, RawTelemetryReporter } from '../../telemetry/telemetryReporter';
 
 /**
  * Telemetry received from the nested process.
@@ -81,6 +82,7 @@ export class NodeLauncher implements Launcher {
   public async launch(
     params: AnyLaunchConfiguration,
     context: ILaunchContext,
+    telemetryReporter: RawTelemetryReporterToDap,
   ): Promise<LaunchResult> {
     if (
       params.type === Contributions.ChromeDebugType &&
@@ -100,7 +102,7 @@ export class NodeLauncher implements Launcher {
       localRoot: this._launchParams.localRoot,
     });
     this.context = context;
-    this._startServer(this._launchParams);
+    this._startServer(this._launchParams, telemetryReporter);
     await this.launchProgram(this._launchParams);
     return { blockSessionTermination: true };
   }
@@ -262,12 +264,12 @@ export class NodeLauncher implements Launcher {
     });
   }
 
-  private _startServer(args: INodeLaunchConfiguration) {
+  private _startServer(args: INodeLaunchConfiguration, rawTelemetryReporter: RawTelemetryReporter) {
     const pipePrefix = process.platform === 'win32' ? '\\\\.\\pipe\\' : os.tmpdir();
     this._pipe = path.join(pipePrefix, `node-cdp.${process.pid}-${++counter}.sock`);
     this._server = net
       .createServer(socket => {
-        this._startSession(socket, args);
+        this._startSession(socket, args, rawTelemetryReporter);
       })
       .listen(this._pipe);
   }
@@ -286,8 +288,8 @@ export class NodeLauncher implements Launcher {
     this._connections = [];
   }
 
-  private async _startSession(socket: net.Socket, args: INodeLaunchConfiguration) {
-    const connection = new Connection(new PipeTransport(socket));
+  private async _startSession(socket: net.Socket, args: INodeLaunchConfiguration, rawTelemetryReporter: RawTelemetryReporter) {
+    const connection = new Connection(new PipeTransport(socket), rawTelemetryReporter);
     this._connections.push(connection);
     const cdp = connection.rootSession();
     const { targetInfo } = await new Promise<Cdp.Target.TargetCreatedEvent>(f =>

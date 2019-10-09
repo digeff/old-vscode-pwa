@@ -10,6 +10,7 @@ import CdpConnection from '../../cdp/connection';
 import { PipeTransport, WebSocketTransport } from '../../cdp/transport';
 import { Readable, Writable } from 'stream';
 import { EnvironmentVars } from '../../common/environmentVars';
+import { RawTelemetryReporterToDap, RawTelemetryReporter } from '../../telemetry/telemetryReporter';
 
 const DEFAULT_ARGS = [
   '--disable-background-networking',
@@ -37,7 +38,7 @@ interface LaunchOptions {
   userDataDir?: string;
 }
 
-export async function launch(executablePath: string, options: LaunchOptions | undefined = {}): Promise<CdpConnection> {
+export async function launch(executablePath: string, rawTelemetryReporter: RawTelemetryReporter, options: LaunchOptions | undefined = {}): Promise<CdpConnection> {
   const {
     args = [],
     dumpio = false,
@@ -97,11 +98,11 @@ export async function launch(executablePath: string, options: LaunchOptions | un
     if (!usePipe) {
       const browserWSEndpoint = await waitForWSEndpoint(browserProcess, timeout);
       const transport = await WebSocketTransport.create(browserWSEndpoint);
-      return new CdpConnection(transport);
+      return new CdpConnection(transport, rawTelemetryReporter);
     } else {
       const stdio = browserProcess.stdio as unknown as [Writable, Readable, Readable, Writable, Readable];
       const transport = new PipeTransport(stdio[3], stdio[4]);
-      return new CdpConnection(transport);
+      return new CdpConnection(transport, rawTelemetryReporter);
     }
   } catch (e) {
     killBrowser();
@@ -144,7 +145,7 @@ interface AttachOptions {
   browserWSEndpoint?: string;
 }
 
-export async function attach(options: AttachOptions): Promise<CdpConnection> {
+export async function attach(options: AttachOptions, rawTelemetryReporter: RawTelemetryReporterToDap): Promise<CdpConnection> {
   const {
     browserWSEndpoint,
     browserURL,
@@ -152,11 +153,11 @@ export async function attach(options: AttachOptions): Promise<CdpConnection> {
 
   if (browserWSEndpoint) {
     const connectionTransport = await WebSocketTransport.create(browserWSEndpoint);
-    return new CdpConnection(connectionTransport);
+    return new CdpConnection(connectionTransport, rawTelemetryReporter);
   } else if (browserURL) {
     const connectionURL = await getWSEndpoint(browserURL);
     const connectionTransport = await WebSocketTransport.create(connectionURL);
-    return new CdpConnection(connectionTransport);
+    return new CdpConnection(connectionTransport, rawTelemetryReporter);
   }
   throw new Error('Either browserURL or browserWSEndpoint needs to be specified');
 }
