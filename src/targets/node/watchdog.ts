@@ -3,6 +3,7 @@
 
 import * as net from 'net';
 import { WebSocketTransport, PipeTransport } from '../../cdp/transport';
+import { NullRawTelemetryReporter } from '../../telemetry/telemetryReporter';
 
 const info = JSON.parse(process.env.NODE_INSPECTOR_INFO!);
 
@@ -21,7 +22,7 @@ process.on('exit', () => {
   let server: PipeTransport;
   let pipe: any;
   await new Promise(f => pipe = net.createConnection(process.env.NODE_INSPECTOR_IPC!, f));
-  server = new PipeTransport(pipe);
+  server = new PipeTransport(pipe, new NullRawTelemetryReporter());
 
   const targetInfo = {
     targetId: info.pid,

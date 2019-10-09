@@ -13,6 +13,7 @@ import { Launcher, Target, LaunchResult } from '../../targets/targets';
 import * as urlUtils from '../../common/urlUtils';
 import { execFileSync } from 'child_process';
 import { CommonLaunchParams } from '../../common/commonLaunchParams';
+import { RawTelemetryReporterToDap } from '../../telemetry/telemetryReporter';
 
 export interface LaunchParams extends CommonLaunchParams {
   command: string;
@@ -55,13 +56,13 @@ export class NodeLauncher implements Launcher {
     });
   }
 
-  async launch(params: CommonLaunchParams, targetOrigin: any): Promise<LaunchResult> {
+  async launch(params: CommonLaunchParams, targetOrigin: any, rawTelemetryReporter: RawTelemetryReporterToDap): Promise<LaunchResult> {
     if (!('command' in params))
       return { blockSessionTermination: false };
     this._launchParams = params as LaunchParams;
     this._pathResolver = new NodeSourcePathResolver(this._launchParams.rootPath);
     this._targetOrigin = targetOrigin;
-    await this._startServer();
+    await this._startServer(rawTelemetryReporter);
     this._launchProgram();
     return { blockSessionTermination: true };
   }
@@ -101,21 +102,21 @@ export class NodeLauncher implements Launcher {
     await this._stopServer();
   }
 
-  async restart(): Promise<void> {
+  async restart(rawTelemetryReporter: RawTelemetryReporterToDap): Promise<void> {
     // Dispose all the connections - Node would not exit child processes otherwise.
     this._isRestarting = true;
     this._programLauncher.stopProgram();
     this._stopServer();
-    await this._startServer();
+    await this._startServer(rawTelemetryReporter);
     this._launchProgram();
     this._isRestarting = false;
   }
 
-  _startServer() {
+  _startServer(rawTelemetryReporter: RawTelemetryReporterToDap) {
     const pipePrefix = process.platform === 'win32' ? '\\\\.\\pipe\\' : os.tmpdir();
     this._pipe = path.join(pipePrefix, `node-cdp.${process.pid}-${++counter}.sock`);
     this._server = net.createServer(socket => {
-      this._startSession(socket);
+      this._startSession(socket, rawTelemetryReporter);
     }).listen(this._pipe);
   }
 
@@ -127,8 +128,8 @@ export class NodeLauncher implements Launcher {
     this._connections = [];
   }
 
-  async _startSession(socket: net.Socket) {
-    const connection = new Connection(new PipeTransport(socket));
+  async _startSession(socket: net.Socket, rawTelemetryReporter: RawTelemetryReporterToDap) {
+    const connection = new Connection(new PipeTransport(socket, rawTelemetryReporter), rawTelemetryReporter);
     this._connections.push(connection);
     const cdp = connection.rootSession();
     const { targetInfo } = await new Promise<Cdp.Target.TargetCreatedEvent>(f => cdp.Target.on('targetCreated', f));

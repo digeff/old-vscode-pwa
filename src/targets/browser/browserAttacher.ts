@@ -9,6 +9,7 @@ import { Target, Launcher, LaunchResult } from '../targets';
 import { BrowserSourcePathResolver } from './browserPathResolver';
 import { baseURL, LaunchParams } from './browserLaunchParams';
 import { CommonLaunchParams } from '../../common/commonLaunchParams';
+import { RawTelemetryReporterToDap } from '../../telemetry/telemetryReporter';
 
 export class BrowserAttacher implements Launcher {
   private _attemptTimer: NodeJS.Timer | undefined;
@@ -36,32 +37,32 @@ export class BrowserAttacher implements Launcher {
       this._targetManager.dispose();
   }
 
-  async launch(params: CommonLaunchParams, targetOrigin: any): Promise<LaunchResult> {
+  async launch(params: CommonLaunchParams, targetOrigin: any, rawTelemetryReporter: RawTelemetryReporterToDap): Promise<LaunchResult> {
     if (!('remoteDebuggingPort' in params) && !('port' in params))
       return { blockSessionTermination: false };
 
     this._launchParams = params;
     this._targetOrigin = targetOrigin;
-    this._attemptToAttach();
+    this._attemptToAttach(rawTelemetryReporter);
     return { blockSessionTermination: false };
   }
 
-  _scheduleAttach() {
+  _scheduleAttach(rawTelemetryReporter: RawTelemetryReporterToDap) {
     this._attemptTimer = setTimeout(() => {
       this._attemptTimer = undefined;
-      this._attemptToAttach();
+      this._attemptToAttach(rawTelemetryReporter);
     }, 1000);
   }
 
-  async _attemptToAttach() {
+  async _attemptToAttach(rawTelemetryReporter: RawTelemetryReporterToDap) {
     const params = this._launchParams!;
     let connection: CdpConnection | undefined;
     try {
-      connection = await launcher.attach({ browserURL: `http://localhost:${params.remoteDebuggingPort || params.port}` });
+      connection = await launcher.attach({ browserURL: `http://localhost:${params.remoteDebuggingPort || params.port}` }, rawTelemetryReporter);
     } catch (e) {
     }
     if (!connection) {
-      this._scheduleAttach();
+      this._scheduleAttach(rawTelemetryReporter);
       return;
     }
 
@@ -76,7 +77,7 @@ export class BrowserAttacher implements Launcher {
         this._onTargetListChangedEmitter.fire();
       }
       if (this._launchParams)
-        this._scheduleAttach();
+        this._scheduleAttach(rawTelemetryReporter);
     }, undefined, this._disposables);
 
     const pathResolver = new BrowserSourcePathResolver(baseURL(params), params.webRoot || params.rootPath);

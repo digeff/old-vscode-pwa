@@ -13,6 +13,7 @@ import { Target, Launcher, LaunchResult } from '../../targets/targets';
 import { BrowserSourcePathResolver } from './browserPathResolver';
 import { LaunchParams, baseURL } from './browserLaunchParams';
 import { CommonLaunchParams } from '../../common/commonLaunchParams';
+import { RawTelemetryReporterToDap } from '../../telemetry/telemetryReporter';
 
 const localize = nls.loadMessageBundle();
 
@@ -42,7 +43,7 @@ export class BrowserLauncher implements Launcher {
     this._disposables = [];
   }
 
-  async _launchBrowser(args: string[], executable: string | undefined): Promise<CdpConnection> {
+  async _launchBrowser(args: string[], executable: string | undefined, rawTelemetryReporter: RawTelemetryReporterToDap): Promise<CdpConnection> {
     let executablePath = '';
     if (executable && executable !== 'canary' && executable !== 'stable' && executable !== 'custom') {
       executablePath = executable;
@@ -66,17 +67,17 @@ export class BrowserLauncher implements Launcher {
     } catch (e) {
     }
     return await launcher.launch(
-      executablePath, {
+      executablePath, rawTelemetryReporter, {
         args,
         userDataDir: path.join(this._storagePath, args.indexOf('--headless') !== -1 ? '.headless-profile' : '.profile'),
         pipe: true,
       });
   }
 
-  async prepareLaunch(params: LaunchParams, targetOrigin: any): Promise<BrowserTarget | string> {
+  async prepareLaunch(params: LaunchParams, targetOrigin: any, rawTelemetryReporter: RawTelemetryReporterToDap): Promise<BrowserTarget | string> {
     let connection: CdpConnection;
     try {
-      connection = await this._launchBrowser(params.browserArgs || params.runtimeArgs || [], params.browserExecutable || params.runtimeExecutable);
+      connection = await this._launchBrowser(params.browserArgs || params.runtimeArgs || [], params.browserExecutable || params.runtimeExecutable, rawTelemetryReporter);
     } catch (e) {
       if (params.browserExecutable || params.runtimeExecutable)
         return localize('error.executableNotFoundParam', 'Unable to find browser "{0}"', params.browserExecutable || params.runtimeExecutable);
@@ -124,10 +125,10 @@ export class BrowserLauncher implements Launcher {
       await mainTarget.cdp().Page.navigate({ url: this._launchParams!.url });
   }
 
-  async launch(params: CommonLaunchParams, targetOrigin: any): Promise<LaunchResult> {
+  async launch(params: CommonLaunchParams, targetOrigin: any, telemetryReporter: RawTelemetryReporterToDap): Promise<LaunchResult> {
     if (!('url' in params))
       return { blockSessionTermination: false };
-    const targetOrError = await this.prepareLaunch(params as LaunchParams, targetOrigin);
+    const targetOrError = await this.prepareLaunch(params as LaunchParams, targetOrigin, telemetryReporter);
     if (typeof targetOrError === 'string')
       return { error: targetOrError };
     await this.finishLaunch(targetOrError);
